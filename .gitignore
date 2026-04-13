@@ -1,0 +1,70 @@
+# === NEVER INCLUDE ===
+
+# Credentials and secrets
+.env
+.env.*
+!.env.example
+config.yaml
+config.yml
+*.yaml.local
+*.key
+*.pem
+
+# PII registry (contains real PII patterns for scanning -- DO NOT commit)
+scripts/pii_registry.yaml
+
+# Personal data
+knowledge_base/
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+
+# Chat and message data
+*wechat*.json
+*qq*.json
+*chat*.json
+*_msgs_*.json
+
+# Claude Code internal state
+.claude/
+.jarvis_oracle_state.json
+dream_result.json
+harness_state.json
+
+# Media and binary
+*.pptx
+*.xlsx
+*.docx
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Test artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,30 @@
+# PII Registry Example -- Copy to pii_registry.yaml and fill in your patterns
+#
+# This file defines patterns that pii_scanner.py uses to detect personal
+# information leaks. Customize for your project.
+
+# Section A: Exact string matches
+exact_strings:
+  - "YOUR_API_KEY_HERE"
+  - "your-email@example.com"
+  # Add your own patterns here
+
+# Section B: Regex patterns
+regex_patterns:
+  - pattern: "sk-[a-zA-Z0-9_-]{20,}"
+    desc: "API key format"
+    severity: critical
+
+  - pattern: "[0-9]{10}@qq\\.com"
+    desc: "QQ email"
+    severity: high
+
+  - pattern: "C:[/\\\\]{1,2}Users[/\\\\]{1,2}YOUR_USERNAME"
+    desc: "Windows user path"
+    severity: high
+
+# Section C: File/directory exclusions
+excluded_paths:
+  - "data/"
+  - "*.db"
+  - ".env"

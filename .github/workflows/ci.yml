@@ -1,0 +1,60 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pii-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: PII Pattern Scan
+        run: python scripts/pii_scanner.py verify src/ agents/ docs/ tests/ examples/
+      - name: Canary Self-Test
+        run: python scripts/pii_scanner.py canary
+      - name: Chinese Text Check (non-comment code)
+        run: |
+          python -c "
+          import re, sys, pathlib
+          hits = []
+          for f in pathlib.Path('src').rglob('*.py'):
+              for i, line in enumerate(f.read_text('utf-8').splitlines(), 1):
+                  stripped = line.split('#')[0]
+                  if re.search(r'[\u4e00-\u9fff]', stripped):
+                      hits.append(f'{f}:{i}: {stripped.strip()}')
+          if hits:
+              print('Chinese text in non-comment code:')
+              for h in hits: print(h)
+              sys.exit(1)
+          print('No Chinese text in non-comment code.')
+          "
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check src/ tests/
+      - run: ruff format --check src/ tests/
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.9", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[all,dev]"
+      - run: pytest tests/ -v --tb=short
