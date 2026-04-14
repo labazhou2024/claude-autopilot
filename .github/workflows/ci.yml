@@ -13,12 +13,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Setup PII Registry
+        run: cp scripts/pii_registry.example.yaml scripts/pii_registry.yaml
       - name: PII Pattern Scan
         run: python scripts/pii_scanner.py verify src/ agents/ tests/
       - name: Canary Self-Test
-        run: |
-          cp scripts/pii_registry.example.yaml scripts/pii_registry.yaml
-          python scripts/pii_scanner.py canary
+        run: python scripts/pii_scanner.py canary
       - name: Chinese Text Check (non-comment code)
         run: |
           python -c "
