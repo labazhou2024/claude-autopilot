@@ -22,8 +22,8 @@ Usage:
 """
 
 import ast
-import re
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -31,13 +31,13 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 SECURITY_PATTERNS = [
-    (r'\beval\s*\(', "eval() usage", "critical"),
-    (r'\bexec\s*\(', "exec() usage", "critical"),
-    (r'\bos\.system\s*\(', "os.system() — use subprocess instead", "critical"),
-    (r'sk-[a-zA-Z0-9]{20,}', "hardcoded API key", "critical"),
+    (r"\beval\s*\(", "eval() usage", "critical"),
+    (r"\bexec\s*\(", "exec() usage", "critical"),
+    (r"\bos\.system\s*\(", "os.system() — use subprocess instead", "critical"),
+    (r"sk-[a-zA-Z0-9]{20,}", "hardcoded API key", "critical"),
     (r'password\s*=\s*["\'][^"\']{4,}["\']', "hardcoded password", "high"),
-    (r'subprocess\.run\([^)]*shell\s*=\s*True', "shell=True in subprocess", "high"),
-    (r'__import__\s*\(', "dynamic __import__() — potential injection", "medium"),
+    (r"subprocess\.run\([^)]*shell\s*=\s*True", "shell=True in subprocess", "high"),
+    (r"__import__\s*\(", "dynamic __import__() — potential injection", "medium"),
 ]
 
 HARDCODED_PATH_PATTERN = re.compile(r'[A-Z]:\\\\?Users\\\\?[^"\'\\]+', re.IGNORECASE)
@@ -46,6 +46,7 @@ HARDCODED_PATH_PATTERN = re.compile(r'[A-Z]:\\\\?Users\\\\?[^"\'\\]+', re.IGNORE
 @dataclass
 class Finding:
     """A single review finding."""
+
     file: str
     line: int
     severity: str  # critical, high, medium, low
@@ -59,6 +60,7 @@ class Finding:
 @dataclass
 class ReviewResult:
     """Result of reviewing one or more files."""
+
     files_reviewed: int
     findings: List[Finding] = field(default_factory=list)
     passed: bool = True
@@ -100,8 +102,9 @@ def review_file(file_path: Path) -> List[Finding]:
     try:
         tree = ast.parse(content)
     except SyntaxError as e:
-        findings.append(Finding(fp_str, e.lineno or 0, "critical", "syntax",
-                                f"SyntaxError: {e.msg}"))
+        findings.append(
+            Finding(fp_str, e.lineno or 0, "critical", "syntax", f"SyntaxError: {e.msg}")
+        )
         return findings  # Can't do further analysis without valid AST
 
     # 2. Security scan (skip test files for eval/exec — test mocks may use them)
@@ -133,12 +136,13 @@ def review_file(file_path: Path) -> List[Finding]:
                 if re.match(r'^\s*r["\']', stripped):
                     continue
                 # 2. Line is a dict/list value string: "description": "eval() usage"
-                if re.match(r'^\s*["\']', stripped) and stripped.rstrip().endswith((',', '"', "'", '",', "',", '}')):
+                _ends = (",", '"', "'", '",', "',", "}")
+                if re.match(r'^\s*["\']', stripped) and stripped.rstrip().endswith(_ends):
                     continue
-                # 3. Match is inside quotes (rough: check if pattern match position is within quotes)
+                # 3. Match is inside quotes (rough heuristic)
                 match = re.search(pattern, line)
                 if match:
-                    before = line[:match.start()]
+                    before = line[: match.start()]
                     # Count unescaped quotes before match — odd count means inside string
                     single_q = before.count("'") - before.count("\\'")
                     double_q = before.count('"') - before.count('\\"')
@@ -151,8 +155,9 @@ def review_file(file_path: Path) -> List[Finding]:
         if line.lstrip().startswith("#"):
             continue
         if HARDCODED_PATH_PATTERN.search(line):
-            findings.append(Finding(fp_str, i, "medium", "path",
-                                    "Hardcoded Windows path — use Path or config"))
+            findings.append(
+                Finding(fp_str, i, "medium", "path", "Hardcoded Windows path — use Path or config")
+            )
 
     # 4. Import analysis
     imported_names = set()
@@ -184,20 +189,23 @@ def review_file(file_path: Path) -> List[Finding]:
             if stripped.startswith("#"):
                 continue
             # Check for the name as a whole word (rough)
-            if re.search(rf'\b{re.escape(name)}\b', line):
+            if re.search(rf"\b{re.escape(name)}\b", line):
                 usage_count += 1
         if usage_count == 0:
-            findings.append(Finding(fp_str, lineno, "low", "dead_code",
-                                    f"Possibly unused import: {name}"))
+            findings.append(
+                Finding(fp_str, lineno, "low", "dead_code", f"Possibly unused import: {name}")
+            )
 
     # 5. Encoding check for file I/O
     for i, line in enumerate(lines, 1):
         # Check for open() without encoding
-        if re.search(r'\bopen\s*\(', line) and "encoding" not in line:
+        if re.search(r"\bopen\s*\(", line) and "encoding" not in line:
             # Skip if it's a binary mode
-            if "'rb'" not in line and '"rb"' not in line and "'wb'" not in line and '"wb"' not in line:
-                findings.append(Finding(fp_str, i, "low", "encoding",
-                                        "open() without encoding= parameter"))
+            binary_modes = ("'rb'", '"rb"', "'wb'", '"wb"')
+            if not any(m in line for m in binary_modes):
+                findings.append(
+                    Finding(fp_str, i, "low", "encoding", "open() without encoding= parameter")
+                )
 
     return findings
 
@@ -243,10 +251,14 @@ def review_files(file_paths: List[str], project_root: Optional[Path] = None) -> 
 def review_staged_files(repo_root: Path) -> ReviewResult:
     """Review all staged .py files in a git repo. For use in pre-commit hook."""
     import subprocess
+
     try:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
-            capture_output=True, text=True, cwd=str(repo_root), timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=str(repo_root),
+            timeout=10,
         )
         if result.returncode != 0:
             return ReviewResult(files_reviewed=0, passed=True)
@@ -264,6 +276,7 @@ def review_staged_files(repo_root: Path) -> ReviewResult:
 # CLI entry point for hook usage
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) > 1:
         files = sys.argv[1:]
         result = review_files(files)

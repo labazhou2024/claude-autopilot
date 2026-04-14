@@ -55,8 +55,8 @@ def configure(data_dir: Path) -> None:
 
 
 # Rotation thresholds
-MAX_EVENTS = 5000       # Rotate when file exceeds this many lines
-KEEP_EVENTS = 1000      # Keep this many recent events after rotation
+MAX_EVENTS = 5000  # Rotate when file exceeds this many lines
+KEEP_EVENTS = 1000  # Keep this many recent events after rotation
 _ROTATION_CHECK_INTERVAL = 50  # Check rotation every N writes
 _write_counter = 0
 
@@ -182,6 +182,7 @@ def get_event_count() -> int:
 
 # --- Internal helpers ---
 
+
 def _tail_lines(filepath: Path, n: int, chunk_size: int = 8192) -> List[str]:
     """Read last N lines of a file efficiently by seeking from end.
 
@@ -251,18 +252,16 @@ def _do_rotate(lines: List[str], keep_events: int) -> str:
     # Write ALL lines to archive (complete history)
     archive_lines = lines[:-keep_events] if len(lines) > keep_events else []
     if archive_lines:
-        archive_file.write_text(
-            "\n".join(archive_lines) + "\n", encoding="utf-8"
-        )
+        archive_file.write_text("\n".join(archive_lines) + "\n", encoding="utf-8")
 
     # Rewrite active file with only recent events
     recent = lines[-keep_events:]
-    events_file.write_text(
-        "\n".join(recent) + "\n", encoding="utf-8"
-    )
+    events_file.write_text("\n".join(recent) + "\n", encoding="utf-8")
 
     logger.info(
         "EventBus rotated: archived %d events to %s, kept %d recent",
-        len(archive_lines), archive_file.name, len(recent),
+        len(archive_lines),
+        archive_file.name,
+        len(recent),
     )
     return str(archive_file)

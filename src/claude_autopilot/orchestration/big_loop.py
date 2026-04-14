@@ -22,7 +22,7 @@ import logging
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -87,11 +87,16 @@ class BigLoop:
 
         try:
             from .event_bus import log_event
-            log_event("big_loop_q1", agent="big_loop", details={
-                "passed": results["passed_count"],
-                "failed": results["failed_count"],
-                "total": results["total"],
-            })
+
+            log_event(
+                "big_loop_q1",
+                agent="big_loop",
+                details={
+                    "passed": results["passed_count"],
+                    "failed": results["failed_count"],
+                    "total": results["total"],
+                },
+            )
         except ImportError:
             pass
 
@@ -111,8 +116,20 @@ class BigLoop:
             pass_count = 0
             for _ in range(3):
                 result = subprocess.run(
-                    [sys.executable, "-m", "pytest", test_name, "-x", "-q", "--tb=no", "--no-header"],
-                    capture_output=True, text=True, cwd=str(self.project_root), timeout=60,
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        test_name,
+                        "-x",
+                        "-q",
+                        "--tb=no",
+                        "--no-header",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.project_root),
+                    timeout=60,
                 )
                 if result.returncode == 0:
                     pass_count += 1
@@ -131,16 +148,17 @@ class BigLoop:
     async def q2_qa_review_spec(self) -> Dict[str, Any]:
         """Generate spec for qa-director Agent. CTO invokes the Agent."""
         # Collect all source files for the Agent to review
-        src_files = [str(p.relative_to(self.project_root))
-                     for p in self.project_root.rglob("*.py")
-                     if "__pycache__" not in str(p) and ".git" not in str(p)
-                     and "archive" not in str(p)]
+        src_files = [
+            str(p.relative_to(self.project_root))
+            for p in self.project_root.rglob("*.py")
+            if "__pycache__" not in str(p) and ".git" not in str(p) and "archive" not in str(p)
+        ]
 
         spec = {
             "agent": "qa-director",
             "model": "opus",
             "prompt": f"Full code review of {len(src_files)} Python files in project. "
-                      f"Output numbered Bug JSON with severity + fix suggestions.",
+            f"Output numbered Bug JSON with severity + fix suggestions.",
             "files_to_review": src_files[:50],  # Cap for context
             "output_format": "json_bug_list",
         }
@@ -162,14 +180,16 @@ class BigLoop:
 
         specs = []
         for file_path, file_bugs in by_file.items():
-            specs.append({
-                "agent": "sonnet-executor",
-                "model": "sonnet",
-                "target_files": [file_path],
-                "bugs": file_bugs,
-                "prompt": f"Fix {len(file_bugs)} bugs in {file_path}: " +
-                          "; ".join(b.get("description", "")[:60] for b in file_bugs),
-            })
+            specs.append(
+                {
+                    "agent": "sonnet-executor",
+                    "model": "sonnet",
+                    "target_files": [file_path],
+                    "bugs": file_bugs,
+                    "prompt": f"Fix {len(file_bugs)} bugs in {file_path}: "
+                    + "; ".join(b.get("description", "")[:60] for b in file_bugs),
+                }
+            )
 
         return {"specs": specs, "total_bugs": len(bugs), "batches": len(specs)}
 
@@ -215,7 +235,9 @@ class BigLoop:
             "spec": {
                 "agent": "release-gate",
                 "model": "sonnet",
-                "prompt": "Full release gate: build verification + test + harness_state sync + CHANGELOG",
+                "prompt": (
+                    "Full release gate: build verification + test + harness_state sync + CHANGELOG"
+                ),
             }
         }
 
@@ -227,8 +249,8 @@ class BigLoop:
                 "agent": "strategic-advisor",
                 "model": "opus",
                 "prompt": "Read global state (harness_state + memory + events). "
-                          "Identify improvement opportunities across 5 dimensions. "
-                          "Output ROI-sorted recommendations.",
+                "Identify improvement opportunities across 5 dimensions. "
+                "Output ROI-sorted recommendations.",
             }
         }
 
@@ -242,6 +264,7 @@ class BigLoop:
 
         try:
             from .event_bus import log_event
+
             log_event("big_loop_start", agent="big_loop", details={"loop_id": loop_id})
         except ImportError:
             pass
@@ -250,8 +273,11 @@ class BigLoop:
             # Q1: Test baseline
             logger.info("Q1: Running test baseline...")
             stages["q1"] = await self.q1_test_baseline()
-            logger.info("Q1: %d passed, %d failed",
-                        stages["q1"]["passed_count"], stages["q1"]["failed_count"])
+            logger.info(
+                "Q1: %d passed, %d failed",
+                stages["q1"]["passed_count"],
+                stages["q1"]["failed_count"],
+            )
 
             # Q1.5: Flaky detection
             logger.info("Q1.5: Detecting flaky tests...")
@@ -281,7 +307,10 @@ class BigLoop:
 
             # Only proceed to Q5/Q6/Q7 if Q4 passed (no regressions)
             if regressions > 0:
-                logger.error("Q4 FAILED: %d regressions. Blocking Q5/Q6/Q7 agent specs.", regressions)
+                logger.error(
+                    "Q4 FAILED: %d regressions. Blocking Q5-Q7.",
+                    regressions,
+                )
                 stages["q5"] = {"skipped": True, "reason": f"Q4 found {regressions} regressions"}
                 stages["q6"] = {"skipped": True, "reason": "blocked by Q4 failure"}
                 # Do NOT append agent_specs — release is blocked
@@ -298,16 +327,24 @@ class BigLoop:
 
             # Q7: Briefing agent spec (always generated — reports success or failure)
             logger.info("Q7: Generating briefing spec...")
+            q1 = stages["q1"]
+            flaky_n = len(stages.get("q1_5", {}).get("flaky", []))
             q7_prompt = (
-                f"Generate big loop completion report. Loop ID: {loop_id}. "
-                f"Q1: {stages['q1'].get('passed_count', 0)} passed, {stages['q1'].get('failed_count', 0)} failed. "
-                f"Q1.5: {len(stages.get('q1_5', {}).get('flaky', []))} flaky. "
+                f"Generate big loop report. Loop: {loop_id}. "
+                f"Q1: {q1.get('passed_count', 0)} passed, "
+                f"{q1.get('failed_count', 0)} failed. "
+                f"Q1.5: {flaky_n} flaky. "
                 f"Q4: {regressions} regressions. "
             )
             if regressions > 0:
-                q7_prompt += "CRITICAL: Q4 regressions detected. Q5/Q6 BLOCKED. Fix regressions before release."
+                q7_prompt += "CRITICAL: Q4 regressions detected. Q5/Q6 BLOCKED. Fix before release."
             q7_prompt += "Read all data sources and output structured CEO report."
-            stages["q7_briefing"] = {"spec": {"agent": "briefing-agent", "model": "sonnet", "prompt": q7_prompt}}
+            q7_spec = {
+                "agent": "briefing-agent",
+                "model": "sonnet",
+                "prompt": q7_prompt,
+            }
+            stages["q7_briefing"] = {"spec": q7_spec}
             agent_specs.append(stages["q7_briefing"]["spec"])
 
             duration = time.time() - start
@@ -347,19 +384,25 @@ class BigLoop:
                 specs_file.write_text(
                     json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
-                logger.info("Queued %d agent specs for CTO: %s",
-                           len(agent_specs), specs_file)
+                logger.info("Queued %d agent specs for CTO: %s", len(agent_specs), specs_file)
             except Exception as e:
                 logger.warning("Failed to save agent specs: %s", e)
 
         try:
             from .event_bus import log_event
-            log_event("big_loop_end", agent="big_loop", details={
-                "loop_id": loop_id, "success": result.success,
-                "bugs_found": result.bugs_found, "regressions": result.regressions,
-                "agent_specs_queued": len(agent_specs),
-                "duration_min": round(result.duration_seconds / 60, 1),
-            })
+
+            log_event(
+                "big_loop_end",
+                agent="big_loop",
+                details={
+                    "loop_id": loop_id,
+                    "success": result.success,
+                    "bugs_found": result.bugs_found,
+                    "regressions": result.regressions,
+                    "agent_specs_queued": len(agent_specs),
+                    "duration_min": round(result.duration_seconds / 60, 1),
+                },
+            )
         except ImportError:
             pass
 
@@ -370,7 +413,10 @@ class BigLoop:
         try:
             result = subprocess.run(
                 [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=no", "--no-header"],
-                capture_output=True, text=True, cwd=str(self.project_root), timeout=180,
+                capture_output=True,
+                text=True,
+                cwd=str(self.project_root),
+                timeout=180,
             )
             output = result.stdout
 
@@ -395,9 +441,13 @@ class BigLoop:
             }
         except Exception as e:
             return {
-                "passed_count": 0, "failed_count": 0, "total": 0,
-                "passed_tests": [], "failed_tests": [],
-                "success": False, "error": str(e),
+                "passed_count": 0,
+                "failed_count": 0,
+                "total": 0,
+                "passed_tests": [],
+                "failed_tests": [],
+                "success": False,
+                "error": str(e),
                 "timestamp": datetime.utcnow().isoformat() + "Z",
             }
 
@@ -424,4 +474,5 @@ async def run_big_loop(project_root: Path = None, bugs: List[Dict] = None) -> Di
 def run_big_loop_sync(project_root: Path = None, bugs: List[Dict] = None) -> Dict[str, Any]:
     """Synchronous wrapper for run_big_loop."""
     import asyncio
+
     return asyncio.run(run_big_loop(project_root=project_root, bugs=bugs))

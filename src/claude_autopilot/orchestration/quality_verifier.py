@@ -27,9 +27,9 @@ import json
 import logging
 import re
 import subprocess
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -73,20 +73,20 @@ def _get_baseline_file() -> Path:
 
 # Signal weights — must sum to 1.0
 WEIGHTS = {
-    "tests_pass":       0.15,
-    "no_regressions":   0.15,
-    "syntax_valid":     0.10,
-    "review_clean":     0.10,
-    "commit_made":      0.10,
-    "diff_reasonable":  0.10,
-    "llm_judge":        0.30,
+    "tests_pass": 0.15,
+    "no_regressions": 0.15,
+    "syntax_valid": 0.10,
+    "review_clean": 0.10,
+    "commit_made": 0.10,
+    "diff_reasonable": 0.10,
+    "llm_judge": 0.30,
 }
 
 # Verdict thresholds
 VERDICT_THRESHOLDS = {
-    "good":       0.70,
+    "good": 0.70,
     "acceptable": 0.45,
-    "poor":       0.25,
+    "poor": 0.25,
     # below 0.25 = "failed"
 }
 
@@ -94,11 +94,12 @@ VERDICT_THRESHOLDS = {
 @dataclass
 class QualityReport:
     """Result of quality verification."""
-    score: float              # 0.0 - 1.0 weighted score
-    signals: Dict[str, float] # individual signal values (0.0 - 1.0)
-    verdict: str              # "good" / "acceptable" / "poor" / "failed"
-    details: str              # human-readable summary
-    score_1_5: int            # legacy 1-5 scale for backward compat
+
+    score: float  # 0.0 - 1.0 weighted score
+    signals: Dict[str, float]  # individual signal values (0.0 - 1.0)
+    verdict: str  # "good" / "acceptable" / "poor" / "failed"
+    details: str  # human-readable summary
+    score_1_5: int  # legacy 1-5 scale for backward compat
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -108,6 +109,7 @@ def _check_tests_pass() -> float:
     """Check pytest results using shared cache (no redundant subprocess)."""
     try:
         from .pytest_cache import get_test_results
+
         results = get_test_results()
         if results.get("success"):
             return 1.0
@@ -131,6 +133,7 @@ def _check_no_regressions() -> float:
         baseline_passed = baseline.get("passed_count", 0)
 
         from .pytest_cache import get_test_results
+
         results = get_test_results()
         current_passed = results.get("passed", 0)
 
@@ -170,18 +173,24 @@ def _check_review_clean() -> float:
         # Get recently modified .py files (last 30 min)
         result = subprocess.run(
             ["git", "diff", "--name-only", "HEAD~1"],
-            capture_output=True, text=True, cwd=str(_get_project_root()), timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=str(_get_project_root()),
+            timeout=10,
         )
-        py_files = [f for f in result.stdout.strip().splitlines()
-                    if f.endswith(".py") and not f.startswith("tests/")]
+        py_files = [
+            f
+            for f in result.stdout.strip().splitlines()
+            if f.endswith(".py") and not f.startswith("tests/")
+        ]
 
         if not py_files:
             return 1.0  # no files to review
 
         from .local_reviewer import review_files
+
         r = review_files(py_files[:10])  # cap at 10
-        critical_high = sum(1 for f in r.findings
-                           if f.severity in ("critical", "high"))
+        critical_high = sum(1 for f in r.findings if f.severity in ("critical", "high"))
         return 1.0 if critical_high == 0 else 0.0
     except ImportError:
         return 0.5  # local_reviewer unavailable -> neutral
@@ -208,9 +217,12 @@ def _check_commit_made(result: Dict) -> float:
         try:
             git_result = subprocess.run(
                 ["git", "log", "--oneline", f"--since={since_seconds} seconds ago"],
-                capture_output=True, text=True, cwd=str(_get_project_root()), timeout=10,
+                capture_output=True,
+                text=True,
+                cwd=str(_get_project_root()),
+                timeout=10,
             )
-            commits = [l for l in git_result.stdout.strip().splitlines() if l.strip()]
+            commits = [ln for ln in git_result.stdout.strip().splitlines() if ln.strip()]
             if len(commits) > 0:
                 return 1.0
             # No commits in window — could be a read-only task, give partial credit
@@ -233,7 +245,10 @@ def _check_diff_reasonable(result: Dict) -> float:
     try:
         git_result = subprocess.run(
             ["git", "diff", "--stat", "HEAD~1"],
-            capture_output=True, text=True, cwd=str(_get_project_root()), timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=str(_get_project_root()),
+            timeout=10,
         )
         stat_output = git_result.stdout.strip()
         match = re.search(r"(\d+)\s+files?\s+changed", stat_output)
@@ -258,6 +273,7 @@ async def _check_llm_judge(project: Dict, result: Dict) -> float:
     """Use LLM Judge for independent quality evaluation. Returns 0-1."""
     try:
         from .llm_judge import judge
+
         title = project.get("title", "")
         output = (result.get("output") or "")[:3000]
 
@@ -265,8 +281,8 @@ async def _check_llm_judge(project: Dict, result: Dict) -> float:
             task_description=title,
             output=output,
             context=f"Cost: ${result.get('cost_usd', 0):.3f}, "
-                    f"Turns: {result.get('num_turns', 0)}, "
-                    f"Success: {result.get('success', False)}",
+            f"Turns: {result.get('num_turns', 0)}, "
+            f"Success: {result.get('success', False)}",
         )
         score = verdict.get("score", 3)
         # Normalize 1-5 -> 0-1
@@ -355,12 +371,12 @@ async def verify_quality(project: Dict, result: Dict) -> QualityReport:
 def verify_quality_sync(project: Dict, result: Dict) -> QualityReport:
     """Synchronous wrapper."""
     import asyncio
+
     try:
         asyncio.get_running_loop()
         import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(
-                asyncio.run, verify_quality(project, result)
-            ).result(timeout=180)
+            return pool.submit(asyncio.run, verify_quality(project, result)).result(timeout=180)
     except RuntimeError:
         return asyncio.run(verify_quality(project, result))

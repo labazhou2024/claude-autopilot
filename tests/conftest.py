@@ -8,7 +8,7 @@ _SRC_DIR = str(Path(__file__).parent.parent / "src")
 if _SRC_DIR not in sys.path:
     sys.path.insert(0, _SRC_DIR)
 
-import pytest
+import pytest  # noqa: E402
 
 
 @pytest.fixture
@@ -32,12 +32,7 @@ def sample_python_file_with_issues(tmp_path):
     """Create a Python file with known review issues."""
     f = tmp_path / "bad_sample.py"
     f.write_text(
-        'import os\n'
-        'import sys\n'
-        '\n'
-        'def run():\n'
-        '    os.system("rm -rf /")\n'
-        '    eval(input())\n',
+        'import os\nimport sys\n\ndef run():\n    os.system("rm -rf /")\n    eval(input())\n',
         encoding="utf-8",
     )
     return f

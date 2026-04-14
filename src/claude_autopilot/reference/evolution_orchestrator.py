@@ -20,10 +20,10 @@ import asyncio
 import json
 import logging
 import time
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass, field, asdict
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ PROTECTED_AGENTS = {"example-protected-agent"}
 @dataclass
 class EvolutionRunResult:
     """Result of one evolution orchestrator run."""
+
     run_id: str
     timestamp: str
     duration_seconds: float
@@ -80,14 +81,25 @@ class EvolutionOrchestrator:
         test_result = self._run_pytest()
 
         # Extract agent execution events (including kairos_feedback for Route A)
-        agent_events = [e for e in events if e.get("type") in
-                       ("agent_complete", "agent_fail", "review_result",
-                        "episode_recorded", "kairos_feedback", "low_quality_agent")]
+        agent_events = [
+            e
+            for e in events
+            if e.get("type")
+            in (
+                "agent_complete",
+                "agent_fail",
+                "review_result",
+                "episode_recorded",
+                "kairos_feedback",
+                "low_quality_agent",
+            )
+        ]
 
         # Resource snapshot (if available)
         resource_info = {}
         try:
             from claude_autopilot.core.resource_monitor import ResourceMonitor
+
             rm = ResourceMonitor()
             snapshot = rm.capture_snapshot()
             resource_info = {
@@ -118,6 +130,7 @@ class EvolutionOrchestrator:
         """Get pytest results using shared cache (no redundant subprocess)."""
         try:
             from claude_autopilot.core.pytest_cache import get_test_results
+
             return get_test_results()
         except Exception as e:
             return {"passed": 0, "failed": 0, "success": False, "error": str(e)}
@@ -137,8 +150,7 @@ class EvolutionOrchestrator:
         # Source 1: kairos_feedback events (real KAIROS execution data)
         all_events = read_events(last_n=200)
         kairos_events = [
-            e for e in all_events
-            if e.get("type") in ("kairos_feedback", "low_quality_agent")
+            e for e in all_events if e.get("type") in ("kairos_feedback", "low_quality_agent")
         ]
 
         scores: Dict[str, List[float]] = {}
@@ -195,6 +207,7 @@ class EvolutionOrchestrator:
         judged_count = 0
         try:
             from claude_autopilot.core.llm_judge import judge
+
             feedback_file = self._data_dir / "kairos_feedback.jsonl"
             if feedback_file.exists():
                 lines = feedback_file.read_text(encoding="utf-8").strip().splitlines()
@@ -246,7 +259,8 @@ class EvolutionOrchestrator:
                 low_score.append(agent)
                 logger.info(
                     "Continuous score: %s avg=%.2f (below 0.6), adding to evolution targets",
-                    agent, c_avg,
+                    agent,
+                    c_avg,
                 )
 
         return {
@@ -254,7 +268,9 @@ class EvolutionOrchestrator:
             "llm_judged": judged_count,
             "avg_score": round(overall_avg, 2),
             "agent_scores": {a: round(v, 2) for a, v in avg_scores.items()},
-            "continuous_scores": {a: round(sum(s)/len(s), 3) for a, s in continuous_scores.items()},
+            "continuous_scores": {
+                a: round(sum(s) / len(s), 3) for a, s in continuous_scores.items()
+            },
             "low_score_agents": low_score,
             "overall_avg": round(overall_avg, 2),
             "sources": ["kairos_feedback", "quality_verified", "agent_events", "llm_judge"],
@@ -262,7 +278,10 @@ class EvolutionOrchestrator:
 
     async def stage_consolidate(self, observations: Dict) -> Dict[str, Any]:
         """Stage 3: Consolidate episodes into semantic patterns."""
-        from claude_autopilot.core.semantic_memory import get_semantic_memory, CONSOLIDATION_THRESHOLD
+        from claude_autopilot.core.semantic_memory import (
+            CONSOLIDATION_THRESHOLD,
+            get_semantic_memory,
+        )
 
         sm = get_semantic_memory()
         if sm._episodes_since_consolidation < CONSOLIDATION_THRESHOLD:
@@ -274,17 +293,20 @@ class EvolutionOrchestrator:
 
         # Build episodes from events
         from claude_autopilot.core.event_bus import read_events
+
         events = read_events(last_n=200)
         episodes = []
         for e in events:
             if e.get("type") in ("episode_recorded", "agent_complete"):
                 details = e.get("details", {})
-                episodes.append({
-                    "task": details.get("task", e.get("type", "")),
-                    "output": details.get("output_summary", ""),
-                    "score": details.get("score", 3),
-                    "agent": e.get("agent", "system"),
-                })
+                episodes.append(
+                    {
+                        "task": details.get("task", e.get("type", "")),
+                        "output": details.get("output_summary", ""),
+                        "score": details.get("score", 3),
+                        "agent": e.get("agent", "system"),
+                    }
+                )
 
         if not episodes:
             return {"skipped": True, "reason": "No episodes to consolidate", "new_patterns": []}
@@ -304,8 +326,8 @@ class EvolutionOrchestrator:
         1. stage_reflect()'s low_score_agents (from avg scores)
         2. low_quality_agent events from feedback_collector (W5)
         """
-        from claude_autopilot.core.prompt_evolver import get_prompt_evolver
         from claude_autopilot.core.event_bus import read_events
+        from claude_autopilot.core.prompt_evolver import get_prompt_evolver
 
         # Source 1: from stage_reflect
         low_score_agents = list(reflections.get("low_score_agents", []))
@@ -341,11 +363,13 @@ class EvolutionOrchestrator:
             for e in events:
                 if e.get("agent") == agent_name:
                     details = e.get("details", {})
-                    outcomes.append({
-                        "task": details.get("task", ""),
-                        "score": details.get("score", 3),
-                        "output_summary": details.get("output_summary", ""),
-                    })
+                    outcomes.append(
+                        {
+                            "task": details.get("task", ""),
+                            "score": details.get("score", 3),
+                            "output_summary": details.get("output_summary", ""),
+                        }
+                    )
 
             if len(outcomes) < 2:
                 continue
@@ -355,6 +379,7 @@ class EvolutionOrchestrator:
             if new_prompt:
                 # Before deploying, submit L2 approval for CEO review
                 from claude_autopilot.core.approval_queue import submit_approval
+
                 apr_id = submit_approval(
                     level="L2",
                     category="prompt_evolution",
@@ -366,13 +391,12 @@ class EvolutionOrchestrator:
                     ),
                     proposal=(
                         f"Deploy evolved prompt (improvement: {evolver._history[-1].improvement:.1%})"
-                        if evolver._history else "Deploy evolved prompt"
+                        if evolver._history
+                        else "Deploy evolved prompt"
                     ),
                     evidence=[f"outcomes: {len(outcomes)}", "low_score: True"],
                 )
-                logger.info(
-                    "Submitted L2 approval %s for %s prompt evolution", apr_id, agent_name
-                )
+                logger.info("Submitted L2 approval %s for %s prompt evolution", apr_id, agent_name)
                 # Deploy immediately (L2 = non-blocking), CEO reviews async
                 # Write back to agent file
                 deployed = self._deploy_prompt(agent_name, agent_file, current_prompt, new_prompt)
@@ -380,11 +404,13 @@ class EvolutionOrchestrator:
                 improvement = 0.0
                 if evolver._history:
                     improvement = evolver._history[-1].improvement
-                evolved_agents.append({
-                    "agent": agent_name,
-                    "deployed": deployed,
-                    "improvement": improvement,
-                })
+                evolved_agents.append(
+                    {
+                        "agent": agent_name,
+                        "deployed": deployed,
+                        "improvement": improvement,
+                    }
+                )
 
         deployed_count = sum(1 for a in evolved_agents if a.get("deployed"))
         return {
@@ -393,14 +419,16 @@ class EvolutionOrchestrator:
             "agents": evolved_agents,
         }
 
-    def _deploy_prompt(self, agent_name: str, agent_file: Path,
-                       old_prompt: str, new_prompt: str) -> bool:
+    def _deploy_prompt(
+        self, agent_name: str, agent_file: Path, old_prompt: str, new_prompt: str
+    ) -> bool:
         """Write evolved prompt back to agent md file."""
         from claude_autopilot.core.event_bus import log_event
 
         # L3 gate for core Opus agents -- requires CEO approval before deploying
         if agent_name in PROTECTED_AGENTS:
             from claude_autopilot.core.approval_queue import submit_approval
+
             apr_id = submit_approval(
                 level="L3",
                 category="prompt_evolution",
@@ -420,16 +448,21 @@ class EvolutionOrchestrator:
             # Preserve YAML frontmatter (must start at line 1)
             # Only match leading frontmatter, not mid-content "---" separators
             import re
-            fm_match = re.match(r'^(---\n.*?\n---)\n', old_prompt, re.DOTALL)
+
+            fm_match = re.match(r"^(---\n.*?\n---)\n", old_prompt, re.DOTALL)
             if fm_match:
                 new_content = fm_match.group(1) + "\n\n" + new_prompt
             else:
                 new_content = new_prompt
 
             agent_file.write_text(new_content, encoding="utf-8")
-            log_event("prompt_deployed", agent=agent_name, details={
-                "backup": str(backup),
-            })
+            log_event(
+                "prompt_deployed",
+                agent=agent_name,
+                details={
+                    "backup": str(backup),
+                },
+            )
             logger.info("Deployed evolved prompt for %s", agent_name)
             return True
         except Exception as e:
@@ -455,8 +488,10 @@ class EvolutionOrchestrator:
         # Cost tracking (feature flag gated)
         try:
             from claude_autopilot.config_loader import get_feature_flag
+
             if get_feature_flag("cost_tracking", False):
                 from claude_autopilot.core.event_bus import read_events
+
                 recent = read_events(last_n=100)
                 cost_events = [e for e in recent if e.get("type") == "cost_record"]
                 total_cost = sum(e.get("details", {}).get("usd", 0) for e in cost_events)
@@ -479,24 +514,36 @@ class EvolutionOrchestrator:
         try:
             # Stage 1
             stages["observe"] = await self.stage_observe()
-            logger.info("Stage 1 OBSERVE: %d events, %d patterns",
-                       stages["observe"]["total_events"], stages["observe"]["pattern_count"])
+            logger.info(
+                "Stage 1 OBSERVE: %d events, %d patterns",
+                stages["observe"]["total_events"],
+                stages["observe"]["pattern_count"],
+            )
 
             # Stage 2
             stages["reflect"] = await self.stage_reflect(stages["observe"])
-            logger.info("Stage 2 REFLECT: avg_score=%.2f, low_score=%s",
-                       stages["reflect"]["avg_score"], stages["reflect"]["low_score_agents"])
+            logger.info(
+                "Stage 2 REFLECT: avg_score=%.2f, low_score=%s",
+                stages["reflect"]["avg_score"],
+                stages["reflect"]["low_score_agents"],
+            )
 
             # Stage 3
             stages["consolidate"] = await self.stage_consolidate(stages["observe"])
-            logger.info("Stage 3 CONSOLIDATE: %s",
-                       "skipped" if stages["consolidate"].get("skipped") else
-                       f"{len(stages['consolidate'].get('new_patterns', []))} new patterns")
+            logger.info(
+                "Stage 3 CONSOLIDATE: %s",
+                "skipped"
+                if stages["consolidate"].get("skipped")
+                else f"{len(stages['consolidate'].get('new_patterns', []))} new patterns",
+            )
 
             # Stage 4
             stages["evolve"] = await self.stage_evolve(stages["reflect"])
-            logger.info("Stage 4 EVOLVE: %d evolved, %d deployed",
-                       stages["evolve"]["evolved"], stages["evolve"]["deployed"])
+            logger.info(
+                "Stage 4 EVOLVE: %d evolved, %d deployed",
+                stages["evolve"]["evolved"],
+                stages["evolve"]["deployed"],
+            )
 
             # Stage 5
             stages["measure"] = await self.stage_measure(stages)
@@ -513,8 +560,11 @@ class EvolutionOrchestrator:
             # Check approval queue status
             try:
                 from claude_autopilot.core.approval_queue import get_pending
+
                 pending = get_pending()
-                l3_count = sum(1 for p in pending if p.get("level") == "L3" and p.get("status") == "pending")
+                l3_count = sum(
+                    1 for p in pending if p.get("level") == "L3" and p.get("status") == "pending"
+                )
                 if l3_count > 0:
                     summary_parts.append(f"{l3_count} L3 approvals pending")
             except Exception:
@@ -543,9 +593,15 @@ class EvolutionOrchestrator:
 
         # Append to runs log
         self._append_run(result)
-        log_event("evolution_cycle_end", agent="orchestrator", details={
-            "run_id": run_id, "success": result.success, "summary": result.summary,
-        })
+        log_event(
+            "evolution_cycle_end",
+            agent="orchestrator",
+            details={
+                "run_id": run_id,
+                "success": result.success,
+                "summary": result.summary,
+            },
+        )
 
         return result
 

@@ -16,7 +16,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +131,7 @@ def safe_read_json(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _atomic_write_bytes(target: Path, data: bytes) -> None:
     """
     Write *data* to *target* atomically using a sibling temp file.
@@ -167,6 +168,7 @@ def _atomic_write_bytes(target: Path, data: bytes) -> None:
         # syscall that either succeeds fully or leaves the original intact.
         # Retry on Windows PermissionError (OneDrive sync, antivirus locks).
         import time as _time
+
         for _attempt in range(3):
             try:
                 os.replace(tmp_path, target)

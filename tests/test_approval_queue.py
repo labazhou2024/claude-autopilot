@@ -6,8 +6,10 @@ from claude_autopilot.core import approval_queue
 def test_submit_and_get(tmp_path):
     approval_queue.configure(tmp_path)
     apr_id = approval_queue.submit_approval(
-        level="L2", category="architecture",
-        title="Test Decision", context="Testing",
+        level="L2",
+        category="architecture",
+        title="Test Decision",
+        context="Testing",
         proposal="Do something",
     )
     assert apr_id.startswith("apr_")
@@ -19,8 +21,11 @@ def test_submit_and_get(tmp_path):
 def test_approve(tmp_path):
     approval_queue.configure(tmp_path)
     apr_id = approval_queue.submit_approval(
-        level="L2", category="test",
-        title="Approve Me", context="ctx", proposal="prop",
+        level="L2",
+        category="test",
+        title="Approve Me",
+        context="ctx",
+        proposal="prop",
     )
     result = approval_queue.approve(apr_id, "Looks good")
     assert result is True
@@ -31,8 +36,11 @@ def test_approve(tmp_path):
 def test_reject(tmp_path):
     approval_queue.configure(tmp_path)
     apr_id = approval_queue.submit_approval(
-        level="L3", category="risk",
-        title="Risky Change", context="ctx", proposal="prop",
+        level="L3",
+        category="risk",
+        title="Risky Change",
+        context="ctx",
+        proposal="prop",
     )
     result = approval_queue.reject(apr_id, "Too risky")
     assert result is True
@@ -48,8 +56,11 @@ def test_format_briefing_empty(tmp_path):
 def test_format_briefing_with_items(tmp_path):
     approval_queue.configure(tmp_path)
     approval_queue.submit_approval(
-        level="L3", category="deploy",
-        title="Deploy v2", context="ctx", proposal="prop",
+        level="L3",
+        category="deploy",
+        title="Deploy v2",
+        context="ctx",
+        proposal="prop",
     )
     briefing = approval_queue.format_briefing()
     assert "Deploy v2" in briefing
@@ -59,8 +70,11 @@ def test_format_briefing_with_items(tmp_path):
 def test_blocked_tasks(tmp_path):
     approval_queue.configure(tmp_path)
     approval_queue.submit_approval(
-        level="L3", category="deploy",
-        title="Blocked Task", context="ctx", proposal="prop",
+        level="L3",
+        category="deploy",
+        title="Blocked Task",
+        context="ctx",
+        proposal="prop",
         blocked_tasks=["task_1", "task_2"],
     )
     blocked = approval_queue.get_blocked_tasks()

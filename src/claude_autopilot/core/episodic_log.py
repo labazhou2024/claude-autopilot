@@ -7,16 +7,17 @@ Features:
 - Async batch writes
 """
 
-import json
 import asyncio
-import aiosqlite
 import atexit
+import json
+import logging
 import signal
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
-import logging
+from typing import Any, Dict, List, Optional
+
+import aiosqlite
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LogEntry:
     """Single log entry"""
+
     timestamp: datetime
     agent: str
     action: str
@@ -32,11 +34,11 @@ class LogEntry:
 
     def to_dict(self) -> Dict:
         return {
-            'timestamp': self.timestamp.isoformat(),
-            'agent': self.agent,
-            'action': self.action,
-            'task_id': self.task_id,
-            'details': self.details,
+            "timestamp": self.timestamp.isoformat(),
+            "agent": self.agent,
+            "action": self.action,
+            "task_id": self.task_id,
+            "details": self.details,
         }
 
 
@@ -162,10 +164,10 @@ class EpisodicLog:
                 rows = await cursor.fetchall()
                 return [
                     {
-                        'timestamp': r[0],
-                        'agent': r[1],
-                        'action': r[2],
-                        'details': json.loads(r[3]) if r[3] else {},
+                        "timestamp": r[0],
+                        "agent": r[1],
+                        "action": r[2],
+                        "details": json.loads(r[3]) if r[3] else {},
                     }
                     for r in rows
                 ]
@@ -179,6 +181,7 @@ class EpisodicLog:
                 # Try synchronous flush
                 if self._buffer:
                     import sqlite3
+
                     conn = sqlite3.connect(str(self.db_path))
                     for entry in self._buffer:
                         conn.execute(
@@ -204,6 +207,7 @@ class EpisodicLog:
         try:
             # Check if we're in the main thread
             import threading
+
             if threading.current_thread() is threading.main_thread():
                 # Save original handlers
                 self._orig_sigint = signal.signal(signal.SIGINT, signal_handler)
@@ -218,9 +222,7 @@ class EpisodicLog:
     def _atexit_handler(self):
         """atexit handler (best-effort data flush)"""
         if self._buffer:
-            logger.warning(
-                f"Episodic log has {len(self._buffer)} unflushed entries on exit"
-            )
+            logger.warning(f"Episodic log has {len(self._buffer)} unflushed entries on exit")
 
     async def close(self):
         """Close and flush remaining logs"""

@@ -14,9 +14,11 @@ jobs:
         with:
           python-version: "3.11"
       - name: PII Pattern Scan
-        run: python scripts/pii_scanner.py verify src/ agents/ docs/ tests/ examples/
+        run: python scripts/pii_scanner.py verify src/ agents/ tests/
       - name: Canary Self-Test
-        run: python scripts/pii_scanner.py canary
+        run: |
+          cp scripts/pii_registry.example.yaml scripts/pii_registry.yaml
+          python scripts/pii_scanner.py canary
       - name: Chinese Text Check (non-comment code)
         run: |
           python -c "

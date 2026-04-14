@@ -42,7 +42,9 @@ def configure(
     """
     global _CONFIG
     _CONFIG = {
-        "harness_path": Path(harness_state_path) if harness_state_path else Path.cwd() / "harness_state.json",
+        "harness_path": (
+            Path(harness_state_path) if harness_state_path else Path.cwd() / "harness_state.json"
+        ),
         "project_root": Path(project_root) if project_root else Path.cwd(),
         "config": config or {},
     }
@@ -72,7 +74,8 @@ def _count_commits_since(ref: str) -> int:
     try:
         result = subprocess.run(
             ["git", "rev-list", "--count", f"{ref}..HEAD"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
             cwd=str(_get_project_root()),
             timeout=10,
         )
@@ -87,10 +90,10 @@ def _run_pytest_quick() -> Dict[str, Any]:
     """Get pytest results using shared cache (no redundant subprocess)."""
     try:
         from claude_autopilot.orchestration.pytest_cache import get_test_results
+
         return get_test_results()
     except Exception as e:
-        return {"passed": 0, "failed": 0, "errors": 1, "success": False,
-                "output": str(e)}
+        return {"passed": 0, "failed": 0, "errors": 1, "success": False, "output": str(e)}
 
 
 def check_triggers() -> List[Dict[str, Any]]:
@@ -124,15 +127,17 @@ def check_triggers() -> List[Dict[str, Any]]:
         sessions = dream_state.get("sessions_since_last_dream", 0)
         threshold = triggers.get("auto_dream_threshold", 5)
         if sessions >= threshold:
-            actions.append({
-                "type": "auto_dream",
-                "reason": (
-                    f"Accumulated {sessions} sessions (threshold {threshold}), "
-                    "triggering auto-dream memory consolidation"
-                ),
-                "priority": 3,
-                "data": {"sessions": sessions, "threshold": threshold},
-            })
+            actions.append(
+                {
+                    "type": "auto_dream",
+                    "reason": (
+                        f"Accumulated {sessions} sessions (threshold {threshold}), "
+                        "triggering auto-dream memory consolidation"
+                    ),
+                    "priority": 3,
+                    "data": {"sessions": sessions, "threshold": threshold},
+                }
+            )
 
     # 2. mini-loop check (commits since last loop)
     # Find the first repo with a last_commit entry
@@ -143,55 +148,67 @@ def check_triggers() -> List[Dict[str, Any]]:
         commits_since = _count_commits_since(last_commit)
         commit_threshold = triggers.get("mini_loop_commit_threshold", 10)
         if commits_since >= commit_threshold:
-            actions.append({
-                "type": "mini_loop",
-                "reason": (
-                    f"Accumulated {commits_since} commits (threshold {commit_threshold}), "
-                    "triggering mini-loop (includes big_loop Q1-Q4)"
-                ),
-                "priority": 2,
-                "data": {
-                    "commits_since": commits_since,
-                    "threshold": commit_threshold,
-                    "big_loop": True,  # Signal CTO to run big_loop
-                },
-            })
+            actions.append(
+                {
+                    "type": "mini_loop",
+                    "reason": (
+                        f"Accumulated {commits_since} commits (threshold {commit_threshold}), "
+                        "triggering mini-loop (includes big_loop Q1-Q4)"
+                    ),
+                    "priority": 2,
+                    "data": {
+                        "commits_since": commits_since,
+                        "threshold": commit_threshold,
+                        "big_loop": True,  # Signal CTO to run big_loop
+                    },
+                }
+            )
 
     # 3. Test health check (always run at session start)
     if triggers.get("auto_fix_on_test_fail", False):
         test_result = _run_pytest_quick()
         if not test_result["success"]:
-            actions.append({
-                "type": "auto_fix_tests",
-                "reason": (
-                    f"Tests failed: {test_result['failed']} failed, "
-                    f"{test_result['errors']} errors"
-                ),
-                "priority": 1,
-                "data": test_result,
-            })
+            actions.append(
+                {
+                    "type": "auto_fix_tests",
+                    "reason": (
+                        f"Tests failed: {test_result['failed']} failed, "
+                        f"{test_result['errors']} errors"
+                    ),
+                    "priority": 1,
+                    "data": test_result,
+                }
+            )
         else:
-            actions.append({
-                "type": "tests_healthy",
-                "reason": f"Tests passed: {test_result['passed']} passed",
-                "priority": 4,
-                "data": test_result,
-            })
+            actions.append(
+                {
+                    "type": "tests_healthy",
+                    "reason": f"Tests passed: {test_result['passed']} passed",
+                    "priority": 4,
+                    "data": test_result,
+                }
+            )
 
     # 4. Semantic memory consolidation check
     try:
-        from claude_autopilot.learning.semantic_memory import get_semantic_memory, CONSOLIDATION_THRESHOLD
+        from claude_autopilot.learning.semantic_memory import (
+            CONSOLIDATION_THRESHOLD,
+            get_semantic_memory,
+        )
+
         sm = get_semantic_memory()
         if sm._episodes_since_consolidation >= CONSOLIDATION_THRESHOLD:
-            actions.append({
-                "type": "consolidate_memory",
-                "reason": (
-                    f"Semantic memory pending consolidation: "
-                    f"{sm._episodes_since_consolidation} episodes awaiting consolidation"
-                ),
-                "priority": 3,
-                "data": {"pending": sm._episodes_since_consolidation},
-            })
+            actions.append(
+                {
+                    "type": "consolidate_memory",
+                    "reason": (
+                        f"Semantic memory pending consolidation: "
+                        f"{sm._episodes_since_consolidation} episodes awaiting consolidation"
+                    ),
+                    "priority": 3,
+                    "data": {"pending": sm._episodes_since_consolidation},
+                }
+            )
     except Exception:
         pass
 
@@ -199,42 +216,48 @@ def check_triggers() -> List[Dict[str, Any]]:
     if triggers.get("auto_postmortem_error_threshold", 0) > 0:
         try:
             from claude_autopilot.core.event_bus import read_events
+
             recent = read_events(last_n=100)
             error_events = [
-                e for e in recent
-                if "fail" in e.get("type", "").lower()
-                or "error" in e.get("type", "").lower()
+                e
+                for e in recent
+                if "fail" in e.get("type", "").lower() or "error" in e.get("type", "").lower()
             ]
             threshold = triggers["auto_postmortem_error_threshold"]
             if len(error_events) >= threshold:
-                actions.append({
-                    "type": "auto_postmortem",
-                    "reason": (
-                        f"Found {len(error_events)} errors in last 100 events "
-                        f"(threshold {threshold}), post-mortem recommended"
-                    ),
-                    "priority": 2,
-                    "data": {"error_count": len(error_events)},
-                })
+                actions.append(
+                    {
+                        "type": "auto_postmortem",
+                        "reason": (
+                            f"Found {len(error_events)} errors in last 100 events "
+                            f"(threshold {threshold}), post-mortem recommended"
+                        ),
+                        "priority": 2,
+                        "data": {"error_count": len(error_events)},
+                    }
+                )
         except Exception:
             pass
 
     # 6. Pending CEO approvals
     try:
         from claude_autopilot.core.approval_queue import get_pending
+
         pending = get_pending()
         if pending:
             l3_count = sum(1 for p in pending if p["level"] == "L3")
             l2_count = sum(1 for p in pending if p["level"] == "L2")
-            actions.append({
-                "type": "pending_approvals",
-                "reason": (
-                    f"Approval queue: {l3_count} blocked + {l2_count} suspended, "
-                    "pending CEO review"
-                ),
-                "priority": 1 if l3_count > 0 else 3,
-                "data": {"l3": l3_count, "l2": l2_count, "items": pending},
-            })
+            actions.append(
+                {
+                    "type": "pending_approvals",
+                    "reason": (
+                        f"Approval queue: {l3_count} blocked + {l2_count} suspended, "
+                        "pending CEO review"
+                    ),
+                    "priority": 1 if l3_count > 0 else 3,
+                    "data": {"l3": l3_count, "l2": l2_count, "items": pending},
+                }
+            )
     except Exception:
         pass
 
@@ -244,28 +267,32 @@ def check_triggers() -> List[Dict[str, Any]]:
         try:
             specs = json.loads(specs_file.read_text(encoding="utf-8"))
             if specs:
-                actions.append({
-                    "type": "pending_agent_specs",
-                    "reason": (
-                        f"Big loop pending: {len(specs)} agent tasks "
-                        "(Q2/Q3/Q5/Q6) awaiting CTO dispatch"
-                    ),
-                    "priority": 2,
-                    "data": {
-                        "count": len(specs),
-                        "agents": [s.get("agent", "?") for s in specs],
-                    },
-                })
+                actions.append(
+                    {
+                        "type": "pending_agent_specs",
+                        "reason": (
+                            f"Big loop pending: {len(specs)} agent tasks "
+                            "(Q2/Q3/Q5/Q6) awaiting CTO dispatch"
+                        ),
+                        "priority": 2,
+                        "data": {
+                            "count": len(specs),
+                            "agents": [s.get("agent", "?") for s in specs],
+                        },
+                    }
+                )
         except Exception:
             pass
 
     # 8. Always queue briefing-agent for SessionStart summary
-    actions.append({
-        "type": "session_briefing",
-        "reason": "SessionStart: scheduling briefing-agent for status report",
-        "priority": 5,  # Low priority -- runs after all checks
-        "data": {"agent": "briefing-agent", "trigger": "session_start"},
-    })
+    actions.append(
+        {
+            "type": "session_briefing",
+            "reason": "SessionStart: scheduling briefing-agent for status report",
+            "priority": 5,  # Low priority -- runs after all checks
+            "data": {"agent": "briefing-agent", "trigger": "session_start"},
+        }
+    )
 
     # Sort by priority
     actions.sort(key=lambda a: a["priority"])
@@ -301,9 +328,7 @@ def increment_session_counter() -> None:
     )
     harness["updated_at"] = datetime.utcnow().isoformat() + "Z"
     harness_path.parent.mkdir(parents=True, exist_ok=True)
-    harness_path.write_text(
-        json.dumps(harness, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    harness_path.write_text(json.dumps(harness, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def reset_dream_counter() -> None:
@@ -315,6 +340,4 @@ def reset_dream_counter() -> None:
         harness["auto_dream"]["last_dream_time"] = datetime.utcnow().isoformat() + "Z"
     harness["updated_at"] = datetime.utcnow().isoformat() + "Z"
     harness_path.parent.mkdir(parents=True, exist_ok=True)
-    harness_path.write_text(
-        json.dumps(harness, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    harness_path.write_text(json.dumps(harness, indent=2, ensure_ascii=False), encoding="utf-8")

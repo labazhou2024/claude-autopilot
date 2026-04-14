@@ -7,7 +7,7 @@ enabling multiple projects to execute concurrently within the daemon.
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum, auto
 from pathlib import Path
@@ -62,16 +62,17 @@ class WorkerPool:
         await pool.drain()  # wait for all to finish
     """
 
-    def __init__(self, max_workers: int = 2,
-                 status_file: Optional[Path] = None,
-                 on_status_change: Optional[Callable] = None):
+    def __init__(
+        self,
+        max_workers: int = 2,
+        status_file: Optional[Path] = None,
+        on_status_change: Optional[Callable] = None,
+    ):
         if max_workers < 1:
             raise ValueError("max_workers must be >= 1")
         self._max_workers = max_workers
         self._semaphore: Optional[asyncio.Semaphore] = None
-        self._slots: Dict[int, WorkerSlot] = {
-            i: WorkerSlot(slot_id=i) for i in range(max_workers)
-        }
+        self._slots: Dict[int, WorkerSlot] = {i: WorkerSlot(slot_id=i) for i in range(max_workers)}
         self._completed_count = 0
         self._failed_count = 0
         self._total_cost = 0.0
@@ -119,9 +120,7 @@ class WorkerPool:
         slot.error = None
         slot.cost_usd = 0.0
 
-        task = asyncio.create_task(
-            self._run_in_slot(slot_id, project, execute_fn)
-        )
+        task = asyncio.create_task(self._run_in_slot(slot_id, project, execute_fn))
         self._tasks[slot_id] = task
         self._write_status()
         return slot_id
@@ -131,14 +130,12 @@ class WorkerPool:
         await self._semaphore.acquire()
         async with self._lock:
             for sid, slot in self._slots.items():
-                if slot.state in (WorkerState.IDLE, WorkerState.COMPLETED,
-                                  WorkerState.FAILED):
+                if slot.state in (WorkerState.IDLE, WorkerState.COMPLETED, WorkerState.FAILED):
                     return sid
         # Fallback — should not happen if semaphore is correct
         return 0
 
-    async def _run_in_slot(self, slot_id: int, project: dict,
-                           execute_fn: Callable) -> dict:
+    async def _run_in_slot(self, slot_id: int, project: dict, execute_fn: Callable) -> dict:
         """Execute a project in the given worker slot.
 
         Note: slot is already marked RUNNING by submit() before this starts.
@@ -178,10 +175,7 @@ class WorkerPool:
 
     def get_status(self) -> PoolStatus:
         """Return current pool status snapshot."""
-        active = sum(
-            1 for s in self._slots.values()
-            if s.state == WorkerState.RUNNING
-        )
+        active = sum(1 for s in self._slots.values() if s.state == WorkerState.RUNNING)
         idle = self._max_workers - active
         return PoolStatus(
             active_workers=active,

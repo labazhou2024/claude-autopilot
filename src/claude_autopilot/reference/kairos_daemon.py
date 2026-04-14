@@ -139,9 +139,16 @@ def submit_project(
 
     try:
         from claude_autopilot.core.event_bus import log_event
-        log_event("project_submitted", agent="kairos", details={
-            "project_id": proj_id, "title": title[:60], "priority": priority,
-        })
+
+        log_event(
+            "project_submitted",
+            agent="kairos",
+            details={
+                "project_id": proj_id,
+                "title": title[:60],
+                "priority": priority,
+            },
+        )
     except Exception:
         pass
 
@@ -159,8 +166,7 @@ def _has_pending_projects() -> bool:
             try:
                 projects = json.loads(_PROJECTS_FILE.read_text(encoding="utf-8"))
                 return any(
-                    p.get("status") == "pending"
-                    and p.get("failure_count", 0) < MAX_FAILURES
+                    p.get("status") == "pending" and p.get("failure_count", 0) < MAX_FAILURES
                     for p in projects
                 )
             except Exception:
@@ -184,9 +190,9 @@ def get_next_project() -> Optional[Dict]:
             return None
 
         pending = [
-            p for p in projects
-            if p.get("status") == "pending"
-            and p.get("failure_count", 0) < MAX_FAILURES
+            p
+            for p in projects
+            if p.get("status") == "pending" and p.get("failure_count", 0) < MAX_FAILURES
         ]
         if not pending:
             return None
@@ -217,8 +223,10 @@ def get_next_project() -> Optional[Dict]:
 # Therefore we use --permission-mode bypass for autonomous execution,
 # with project hooks providing the actual safety enforcement.
 
-def _invoke_claude(prompt: str, model: str, budget: float,
-                   max_turns: int, resume_session: Optional[str] = None) -> Dict:
+
+def _invoke_claude(
+    prompt: str, model: str, budget: float, max_turns: int, resume_session: Optional[str] = None
+) -> Dict:
     """Core claude invocation. Returns parsed result dict.
 
     Permission model (v2.2 AUTONOMOUS):
@@ -228,17 +236,24 @@ def _invoke_claude(prompt: str, model: str, budget: float,
     cmd = [
         _CLAUDE_CMD,
         "-p",
-        "--output-format", "json",
-        "--model", model,
-        "--max-budget-usd", str(budget),
+        "--output-format",
+        "json",
+        "--model",
+        model,
+        "--max-budget-usd",
+        str(budget),
     ]
 
     cmd.extend(["--permission-mode", "bypassPermissions"])
 
-    cmd.extend([
-        "--max-turns", str(max_turns),
-        "--add-dir", str(_PROJECT_ROOT),
-    ])
+    cmd.extend(
+        [
+            "--max-turns",
+            str(max_turns),
+            "--add-dir",
+            str(_PROJECT_ROOT),
+        ]
+    )
 
     if resume_session:
         cmd.extend(["--resume", resume_session])
@@ -274,19 +289,42 @@ def _invoke_claude(prompt: str, model: str, budget: float,
             "cost_usd": parsed.get("total_cost_usd", 0),
             "num_turns": parsed.get("num_turns", 0),
             "stop_reason": parsed.get("stop_reason", ""),
-            "model_used": list(parsed.get("modelUsage", {}).keys())[0] if parsed.get("modelUsage") else model,
+            "model_used": list(parsed.get("modelUsage", {}).keys())[0]
+            if parsed.get("modelUsage")
+            else model,
             "error": result.stderr[:500] if result.returncode != 0 else None,
         }
 
     except subprocess.TimeoutExpired:
-        return {"success": False, "output": "", "duration_seconds": round(time.time() - start, 2),
-                "error": "Timeout after 600s", "session_id": None, "cost_usd": 0, "num_turns": 0}
+        return {
+            "success": False,
+            "output": "",
+            "duration_seconds": round(time.time() - start, 2),
+            "error": "Timeout after 600s",
+            "session_id": None,
+            "cost_usd": 0,
+            "num_turns": 0,
+        }
     except FileNotFoundError:
-        return {"success": False, "output": "", "duration_seconds": 0,
-                "error": f"Claude CLI not found: {_CLAUDE_CMD}", "session_id": None, "cost_usd": 0, "num_turns": 0}
+        return {
+            "success": False,
+            "output": "",
+            "duration_seconds": 0,
+            "error": f"Claude CLI not found: {_CLAUDE_CMD}",
+            "session_id": None,
+            "cost_usd": 0,
+            "num_turns": 0,
+        }
     except Exception as e:
-        return {"success": False, "output": "", "duration_seconds": round(time.time() - start, 2),
-                "error": str(e), "session_id": None, "cost_usd": 0, "num_turns": 0}
+        return {
+            "success": False,
+            "output": "",
+            "duration_seconds": round(time.time() - start, 2),
+            "error": str(e),
+            "session_id": None,
+            "cost_usd": 0,
+            "num_turns": 0,
+        }
 
 
 def _inject_patterns_and_lessons(project: Dict, prompt: str) -> str:
@@ -296,6 +334,7 @@ def _inject_patterns_and_lessons(project: Dict, prompt: str) -> str:
     # W3: Inject relevant semantic patterns
     try:
         from claude_autopilot.core.semantic_memory import get_semantic_memory
+
         sm = get_semantic_memory()
         task_desc = project.get("title", "") + " " + prompt[:200]
         patterns = sm.retrieve(task_desc, top_k=3)
@@ -318,6 +357,7 @@ def _inject_patterns_and_lessons(project: Dict, prompt: str) -> str:
     # Lesson injection: retrieve relevant lessons from past experience
     try:
         from claude_autopilot.core.lesson_store import get_lesson_store
+
         ls = get_lesson_store()
         task_context = project.get("title", "") + " " + prompt[:300]
         lessons = ls.retrieve_lessons(task_context, top_k=3)
@@ -335,8 +375,9 @@ def _inject_patterns_and_lessons(project: Dict, prompt: str) -> str:
     return prompt
 
 
-def _self_heal_and_retry(project: Dict, result: Dict, prompt: str,
-                          model: str, budget: float, max_turns: int) -> Dict:
+def _self_heal_and_retry(
+    project: Dict, result: Dict, prompt: str, model: str, budget: float, max_turns: int
+) -> Dict:
     """Attempt self-healing based on error classification.
 
     Returns the final result after retry attempts (or the original if no retry).
@@ -351,8 +392,13 @@ def _self_heal_and_retry(project: Dict, result: Dict, prompt: str,
     category, strategy = classify_error(error_msg, error_type)
     proj_id = project.get("id", "")
 
-    logger.info("Error classified: %s -> %s (retry=%s, delay=%.0fs)",
-                proj_id, category.value, strategy.should_retry, strategy.delay_seconds)
+    logger.info(
+        "Error classified: %s -> %s (retry=%s, delay=%.0fs)",
+        proj_id,
+        category.value,
+        strategy.should_retry,
+        strategy.delay_seconds,
+    )
 
     # Store classification in result for dashboard visibility
     result["error_category"] = category.value
@@ -367,8 +413,9 @@ def _self_heal_and_retry(project: Dict, result: Dict, prompt: str,
     # RESOURCE errors: check if we should pause the entire daemon
     if category == ErrorCategory.RESOURCE:
         if strategy.wait_until:
-            logger.warning("RESOURCE limit hit for %s. Reset at %s. Pausing.",
-                           proj_id, strategy.wait_until)
+            logger.warning(
+                "RESOURCE limit hit for %s. Reset at %s. Pausing.", proj_id, strategy.wait_until
+            )
             result["resource_wait_until"] = strategy.wait_until
         return result  # Caller handles pause
 
@@ -376,13 +423,18 @@ def _self_heal_and_retry(project: Dict, result: Dict, prompt: str,
     session_id = result.get("session_id") or project.get("session_id")
     for attempt in range(strategy.max_retries):
         delay = get_delay_for_attempt(strategy, attempt)
-        logger.info("Retry %d/%d for %s in %.0fs (%s)",
-                    attempt + 1, strategy.max_retries, proj_id, delay, strategy.strategy_name)
+        logger.info(
+            "Retry %d/%d for %s in %.0fs (%s)",
+            attempt + 1,
+            strategy.max_retries,
+            proj_id,
+            delay,
+            strategy.strategy_name,
+        )
         time.sleep(delay)
 
         # For timeout errors, increase the subprocess timeout
-        retry_result = _invoke_claude(prompt, model, budget, max_turns,
-                                       resume_session=session_id)
+        retry_result = _invoke_claude(prompt, model, budget, max_turns, resume_session=session_id)
         if retry_result.get("success"):
             logger.info("Self-healed %s on retry %d", proj_id, attempt + 1)
             retry_result["self_healed"] = True
@@ -391,9 +443,7 @@ def _self_heal_and_retry(project: Dict, result: Dict, prompt: str,
             return retry_result
 
         # If same error category, continue retrying; if different, re-classify
-        new_cat, new_strat = classify_error(
-            retry_result.get("error") or "", "", {}
-        )
+        new_cat, new_strat = classify_error(retry_result.get("error") or "", "", {})
         if new_cat == ErrorCategory.RESOURCE:
             retry_result["error_category"] = new_cat.value
             retry_result["resource_wait_until"] = new_strat.wait_until
@@ -407,6 +457,7 @@ def _self_heal_and_retry(project: Dict, result: Dict, prompt: str,
 def _extract_agent_name_from_title(title: str) -> Optional[str]:
     """Extract agent name from BigLoop project title like '[BigLoop qa-director] ...'."""
     import re
+
     m = re.search(r"\[BigLoop\s+([\w-]+)\]", title)
     if not m:
         return None
@@ -514,7 +565,9 @@ def execute_project(project: Dict) -> Dict:
         continuation_turns = int(max_turns * 1.5)  # Give more headroom for continuation
         continuation = _invoke_claude(
             "Continue the previous task. Complete any remaining work, then run tests and commit.",
-            model, budget, continuation_turns,
+            model,
+            budget,
+            continuation_turns,
             resume_session=result["session_id"],
         )
         total_cost += continuation.get("cost_usd", 0)
@@ -561,8 +614,12 @@ def execute_project(project: Dict) -> Dict:
                         _submit_debug_project(project, final_result, debug_depth)
                 else:
                     p["status"] = "pending"
-                    logger.warning("Project %s failed (attempt %d/%d), will retry.",
-                                   proj_id, p["failure_count"], MAX_FAILURES)
+                    logger.warning(
+                        "Project %s failed (attempt %d/%d), will retry.",
+                        proj_id,
+                        p["failure_count"],
+                        MAX_FAILURES,
+                    )
             p["result"] = final_result
             p["session_id"] = final_result.get("session_id")
             p["total_cost_usd"] = round(p.get("total_cost_usd", 0) + total_cost, 4)
@@ -570,8 +627,11 @@ def execute_project(project: Dict) -> Dict:
 
     # Save report
     _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    report = {"project": project, "result": final_result,
-              "executed_at": datetime.utcnow().isoformat() + "Z"}
+    report = {
+        "project": project,
+        "result": final_result,
+        "executed_at": datetime.utcnow().isoformat() + "Z",
+    }
     (_REPORTS_DIR / f"{proj_id}.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -602,10 +662,17 @@ def execute_project(project: Dict) -> Dict:
 
     try:
         from claude_autopilot.core.event_bus import log_event
-        log_event("project_completed", agent="kairos", details={
-            "project_id": proj_id, "success": final_result["success"],
-            "cost": total_cost, "turns": total_turns,
-        })
+
+        log_event(
+            "project_completed",
+            agent="kairos",
+            details={
+                "project_id": proj_id,
+                "success": final_result["success"],
+                "cost": total_cost,
+                "turns": total_turns,
+            },
+        )
     except Exception:
         pass
 
@@ -613,19 +680,25 @@ def execute_project(project: Dict) -> Dict:
     # Must run BEFORE collect_feedback so quality_report is available for scoring
     try:
         from claude_autopilot.core.real_quality_verifier import verify_quality_sync
+
         qr = verify_quality_sync(project, final_result)
         logger.info("Quality: %s (%.2f) -- %s", qr.verdict, qr.score, qr.details[:100])
         final_result["quality_report"] = qr.to_dict()
 
         # Store quality score in event bus for evolution consumption
         from claude_autopilot.core.event_bus import log_event
-        log_event("quality_verified", agent="real_quality_verifier", details={
-            "project_id": proj_id,
-            "score": qr.score,
-            "score_1_5": qr.score_1_5,
-            "verdict": qr.verdict,
-            "signals": qr.signals,
-        })
+
+        log_event(
+            "quality_verified",
+            agent="real_quality_verifier",
+            details={
+                "project_id": proj_id,
+                "score": qr.score,
+                "score_1_5": qr.score_1_5,
+                "verdict": qr.verdict,
+                "signals": qr.signals,
+            },
+        )
     except Exception as e:
         logger.debug("Quality verification skipped: %s", e)
 
@@ -633,18 +706,22 @@ def execute_project(project: Dict) -> Dict:
     # (now has quality_report from real_quality_verifier above)
     try:
         from claude_autopilot.core.feedback_collector import collect_feedback
+
         feedback = collect_feedback(project, final_result)
-        logger.info("Feedback: score=%d, w1=%s, w2=%s, w5=%s",
-                     feedback.get("quality_score", 0),
-                     feedback.get("w1_episode_recorded"),
-                     feedback.get("w2_event_logged"),
-                     feedback.get("w5_low_quality_tagged"))
+        logger.info(
+            "Feedback: score=%d, w1=%s, w2=%s, w5=%s",
+            feedback.get("quality_score", 0),
+            feedback.get("w1_episode_recorded"),
+            feedback.get("w2_event_logged"),
+            feedback.get("w5_low_quality_tagged"),
+        )
     except Exception as e:
         logger.debug("Feedback collection skipped: %s", e)
 
     # Lesson learning: generate lessons from outcome + track injected lesson outcomes
     try:
         from claude_autopilot.core.lesson_store import get_lesson_store
+
         ls = get_lesson_store()
 
         # Generate lesson from this execution
@@ -652,9 +729,7 @@ def execute_project(project: Dict) -> Dict:
             ls.generate_lesson_from_success(project, final_result)
         else:
             error_cat = final_result.get("error_category", "UNKNOWN")
-            ls.generate_lesson_from_failure(
-                project, final_result.get("error") or "", error_cat
-            )
+            ls.generate_lesson_from_failure(project, final_result.get("error") or "", error_cat)
 
         # Track outcomes of injected lessons
         for lid in project.get("injected_lesson_ids", []):
@@ -668,8 +743,14 @@ def execute_project(project: Dict) -> Dict:
     _notify_on_failure(project, final_result)
 
     status = "completed" if final_result["success"] else "FAILED"
-    logger.info("Project %s %s in %.1fs ($%.3f, %d turns)",
-                proj_id, status, final_result["duration_seconds"], total_cost, total_turns)
+    logger.info(
+        "Project %s %s in %.1fs ($%.3f, %d turns)",
+        proj_id,
+        status,
+        final_result["duration_seconds"],
+        total_cost,
+        total_turns,
+    )
 
     return final_result
 
@@ -715,8 +796,12 @@ def _submit_debug_project(original_project: Dict, result: Dict, current_depth: i
                     p["debug_depth"] = current_depth + 1
                     p["parent_project"] = original_project.get("id", "")
             _save_projects(projects)
-            logger.info("R6: Debug sub-project %s submitted (depth=%d) for failed %s",
-                        debug_id, current_depth + 1, original_project.get("id", ""))
+            logger.info(
+                "R6: Debug sub-project %s submitted (depth=%d) for failed %s",
+                debug_id,
+                current_depth + 1,
+                original_project.get("id", ""),
+            )
     except Exception as e:
         logger.debug("Debug project submission failed: %s", e)
 
@@ -734,6 +819,7 @@ def _notify_on_failure(project: Dict, result: Dict):
 
     try:
         from claude_autopilot.core.approval_queue import submit_approval
+
         submit_approval(
             level="L2",
             category="kairos_failure",
@@ -797,12 +883,14 @@ def generate_summary_report() -> Dict:
     return summary
 
 
-def _write_heartbeat(current_project: Optional[Dict] = None,
-                     projects_done: int = 0, total_cost: float = 0):
+def _write_heartbeat(
+    current_project: Optional[Dict] = None, projects_done: int = 0, total_cost: float = 0
+):
     """Write heartbeat file -- operator can see what KAIROS is doing RIGHT NOW."""
     hb_file = _DATA / "kairos_heartbeat.json"
     try:
         import os
+
         hb = {
             "pid": os.getpid(),
             "ts": datetime.utcnow().isoformat() + "Z",
@@ -864,6 +952,7 @@ async def _try_evolution_cycle(completed_count: int, force: bool = False) -> int
 
     try:
         from claude_autopilot.reference.evolution_orchestrator import run_evolution_cycle
+
         logger.info("=== EVOLUTION CYCLE (after %d completions) ===", completed_count)
         result = await run_evolution_cycle()
         summary = result.get("summary", "done")
@@ -887,6 +976,7 @@ async def daemon_loop_async(
     every 5 completed projects or when idle.
     """
     import asyncio
+
     from claude_autopilot.core.worker_pool import WorkerPool
 
     # File logging for dashboard monitoring
@@ -904,8 +994,7 @@ async def daemon_loop_async(
     deadline = start_time + duration_minutes * 60 if duration_minutes else None
     completed_since_evolution = 0
 
-    logger.info("KAIROS v3 daemon started. Workers: %d, Poll: %ds.",
-                max_workers, poll_interval)
+    logger.info("KAIROS v3 daemon started. Workers: %d, Poll: %ds.", max_workers, poll_interval)
     if deadline:
         logger.info("Auto-stop after %d min.", duration_minutes)
 
@@ -930,15 +1019,17 @@ async def daemon_loop_async(
                 project = get_next_project()
                 if not project:
                     break
-                logger.info("Dispatching: %s (P%d) -> slot",
-                            project.get("title", "")[:45],
-                            project.get("priority", 3))
+                logger.info(
+                    "Dispatching: %s (P%d) -> slot",
+                    project.get("title", "")[:45],
+                    project.get("priority", 3),
+                )
                 await pool.submit(project, execute_project)
 
             # Track completions for evolution trigger
             status = pool.get_status()
             current_total = status.total_completed + status.total_failed
-            if not hasattr(daemon_loop_async, '_last_total'):
+            if not hasattr(daemon_loop_async, "_last_total"):
                 daemon_loop_async._last_total = 0
             new_completions = current_total - daemon_loop_async._last_total
             if new_completions > 0:
@@ -961,13 +1052,15 @@ async def daemon_loop_async(
 
                     try:
                         from claude_autopilot.core.task_brain import get_task_brain
+
                         brain = get_task_brain()
                         new_projects = brain.on_queue_empty()
                         actually_submitted = 0
                         if new_projects:
                             for p in new_projects:
                                 pid = submit_project(
-                                    title=p["title"], prompt=p["prompt"],
+                                    title=p["title"],
+                                    prompt=p["prompt"],
                                     priority=p.get("priority", 3),
                                     model=p.get("model", DEFAULT_MODEL),
                                     max_turns=p.get("max_turns", 25),
@@ -975,12 +1068,17 @@ async def daemon_loop_async(
                                 if pid:  # Non-empty = actually submitted (not a dup)
                                     actually_submitted += 1
                             if actually_submitted > 0:
-                                logger.info("Brain discovered %d new projects (%d submitted).",
-                                            len(new_projects), actually_submitted)
+                                logger.info(
+                                    "Brain discovered %d new projects (%d submitted).",
+                                    len(new_projects),
+                                    actually_submitted,
+                                )
                                 continue  # Re-enter loop to dispatch new projects
                             else:
-                                logger.debug("Brain generated %d projects but all duplicates.",
-                                            len(new_projects))
+                                logger.debug(
+                                    "Brain generated %d projects but all duplicates.",
+                                    len(new_projects),
+                                )
                     except Exception as e:
                         logger.debug("Brain discovery skipped: %s", e)
 
@@ -1004,21 +1102,27 @@ async def daemon_loop_async(
     _clear_heartbeat()
     summary = generate_summary_report()
     elapsed = (time.time() - start_time) / 60
-    logger.info("SESSION COMPLETE: %d completed, %d failed, $%.3f, %.1f min",
-                summary["completed"], summary["failed"],
-                summary["total_cost_usd"], elapsed)
+    logger.info(
+        "SESSION COMPLETE: %d completed, %d failed, $%.3f, %.1f min",
+        summary["completed"],
+        summary["failed"],
+        summary["total_cost_usd"],
+        elapsed,
+    )
 
 
 # Keep sync wrapper for backward compat with callers that expect sync daemon_loop
-def daemon_loop(duration_minutes: Optional[int] = None,
-                poll_interval: int = POLL_INTERVAL):
+def daemon_loop(duration_minutes: Optional[int] = None, poll_interval: int = POLL_INTERVAL):
     """Sync wrapper around daemon_loop_async (single worker, backward compat)."""
     import asyncio
-    asyncio.run(daemon_loop_async(
-        duration_minutes=duration_minutes,
-        max_workers=1,
-        poll_interval=poll_interval,
-    ))
+
+    asyncio.run(
+        daemon_loop_async(
+            duration_minutes=duration_minutes,
+            max_workers=1,
+            poll_interval=poll_interval,
+        )
+    )
 
 
 # Backward compat aliases -- used by tests and other modules
@@ -1035,18 +1139,18 @@ def main():
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--duration", type=int, default=None)
     parser.add_argument("--poll", type=int, default=POLL_INTERVAL)
-    parser.add_argument("--workers", type=int, default=2,
-                        help="Max parallel workers (default: 2)")
+    parser.add_argument("--workers", type=int, default=2, help="Max parallel workers (default: 2)")
     parser.add_argument("--summary", action="store_true")
-    parser.add_argument("--evolve", action="store_true",
-                        help="Run one evolution cycle and exit")
+    parser.add_argument("--evolve", action="store_true", help="Run one evolution cycle and exit")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s [KAIROS] %(message)s", datefmt="%H:%M:%S")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [KAIROS] %(message)s", datefmt="%H:%M:%S"
+    )
 
     if args.evolve:
         from claude_autopilot.reference.evolution_orchestrator import run_evolution_cycle_sync
+
         print("Running evolution cycle...")
         result = run_evolution_cycle_sync()
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
@@ -1068,11 +1172,13 @@ def main():
         if args.duration:
             print(f"  Duration: {args.duration} min")
         print("=" * 50)
-        asyncio.run(daemon_loop_async(
-            duration_minutes=args.duration,
-            max_workers=args.workers,
-            poll_interval=args.poll,
-        ))
+        asyncio.run(
+            daemon_loop_async(
+                duration_minutes=args.duration,
+                max_workers=args.workers,
+                poll_interval=args.poll,
+            )
+        )
 
 
 if __name__ == "__main__":

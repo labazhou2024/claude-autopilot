@@ -1,9 +1,8 @@
 """Tests for worker_pool -- async parallel execution."""
 
-import asyncio
 import pytest
 
-from claude_autopilot.core.worker_pool import WorkerPool, WorkerState
+from claude_autopilot.core.worker_pool import WorkerPool
 
 
 @pytest.mark.asyncio
@@ -13,7 +12,7 @@ async def test_submit_and_complete(tmp_path):
     def task(project):
         return {"success": True, "cost_usd": 0.01}
 
-    slot_id = await pool.submit({"id": "p1", "title": "Test"}, task)
+    await pool.submit({"id": "p1", "title": "Test"}, task)
     await pool.drain(timeout=10)
 
     status = pool.get_status()

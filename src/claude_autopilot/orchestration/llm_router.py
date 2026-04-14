@@ -71,14 +71,14 @@ class LLMRouter:
 
     def estimate_complexity(self, code: str) -> str:
         """Estimate code complexity (kept for backward compat)."""
-        lines_count = code.count('\n')
-        classes = code.count('class ')
-        functions = code.count('def ')
+        lines_count = code.count("\n")
+        classes = code.count("class ")
+        functions = code.count("def ")
         if lines_count > 500 or classes > 5 or functions > 15:
-            return 'complex'
+            return "complex"
         elif lines_count > 100 or classes > 2 or functions > 5:
-            return 'moderate'
-        return 'simple'
+            return "moderate"
+        return "simple"
 
     def call(
         self,
@@ -122,8 +122,7 @@ class LLMRouter:
         try:
             self._call_count += 1
             result = subprocess.run(
-                [self._claude_bin, "-p", "--model", self._DEFAULT_MODEL,
-                 "--output-format", "text"],
+                [self._claude_bin, "-p", "--model", self._DEFAULT_MODEL, "--output-format", "text"],
                 input=prompt,
                 capture_output=True,
                 text=True,
@@ -143,7 +142,8 @@ class LLMRouter:
 
             logger.debug(
                 "LLM call OK (task=%s, len=%d chars)",
-                task_type.value, len(content),
+                task_type.value,
+                len(content),
             )
             return content
 
@@ -172,8 +172,12 @@ class LLMRouter:
             return await asyncio.get_running_loop().run_in_executor(
                 None,
                 lambda: self.call(
-                    task_type, messages, temperature, max_tokens,
-                    response_format, provider,
+                    task_type,
+                    messages,
+                    temperature,
+                    max_tokens,
+                    response_format,
+                    provider,
                 ),
             )
 

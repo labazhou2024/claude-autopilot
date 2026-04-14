@@ -12,15 +12,16 @@ from typing import Optional, Tuple
 
 class ValidationError(ValueError):
     """Validation error"""
+
     pass
 
 
 # Common regex patterns
-FILE_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\.]+$')
-DATE_PATTERN = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+FILE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.]+$")
+DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 SQL_KEYWORDS = re.compile(
-    r'\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|'
-    r'SCRIPT|JAVASCRIPT|VBSCRIPT|ONERROR|ONLOAD|ONCLICK)\b',
+    r"\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|"
+    r"SCRIPT|JAVASCRIPT|VBSCRIPT|ONERROR|ONLOAD|ONCLICK)\b",
     re.IGNORECASE,
 )
 
@@ -60,7 +61,7 @@ def validate_agent_name(agent: str) -> str:
     if len(agent) < 1 or len(agent) > 32:
         raise ValidationError(f"agent length must be 1-32, got {len(agent)}")
 
-    if not re.match(r'^[a-zA-Z0-9_]+$', agent):
+    if not re.match(r"^[a-zA-Z0-9_]+$", agent):
         raise ValidationError(f"agent contains invalid characters: {agent}")
 
     return agent
@@ -80,7 +81,7 @@ def validate_context_key(key: str) -> str:
     if len(key) < 1 or len(key) > 64:
         raise ValidationError(f"key length must be 1-64, got {len(key)}")
 
-    if not re.match(r'^[a-zA-Z0-9_\.]+$', key):
+    if not re.match(r"^[a-zA-Z0-9_\.]+$", key):
         raise ValidationError(f"key contains invalid characters: {key}")
 
     return key
@@ -114,9 +115,7 @@ def validate_days(days: int, min_days: int = 1, max_days: int = 3650) -> int:
         raise ValidationError(f"days must be integer, got {type(days)}")
 
     if days < min_days or days > max_days:
-        raise ValidationError(
-            f"days must be between {min_days}-{max_days}, got {days}"
-        )
+        raise ValidationError(f"days must be between {min_days}-{max_days}, got {days}")
 
     return days
 
@@ -145,9 +144,7 @@ def validate_file_path(
         try:
             path_obj.relative_to(base)
         except ValueError:
-            raise ValidationError(
-                f"path must be within {base}, got {path_obj}"
-            )
+            raise ValidationError(f"path must be within {base}, got {path_obj}")
 
     # Existence check
     if must_exist and not path_obj.exists():
@@ -167,14 +164,15 @@ def sanitize_user_input(text: str, max_length: int = 10000) -> str:
 
     # Length limit
     if len(text) > max_length:
-        raise ValidationError(
-            f"input exceeds max length {max_length}: {len(text)}"
-        )
+        raise ValidationError(f"input exceeds max length {max_length}: {len(text)}")
 
     # Remove control characters (preserve newlines, tabs)
-    sanitized = ''.join(
-        char for char in text
-        if char == '\n' or char == '\t' or (ord(char) >= 32 and ord(char) <= 126)
+    sanitized = "".join(
+        char
+        for char in text
+        if char == "\n"
+        or char == "\t"
+        or (ord(char) >= 32 and ord(char) <= 126)
         or ord(char) > 127  # Allow non-ASCII characters (e.g. CJK)
     )
 
@@ -190,8 +188,8 @@ def validate_websocket_message(data: dict) -> Tuple[str, str]:
     if not isinstance(data, dict):
         raise ValidationError(f"message must be dict, got {type(data)}")
 
-    msg_type = data.get('type')
-    content = data.get('content')
+    msg_type = data.get("type")
+    content = data.get("content")
 
     if not msg_type:
         raise ValidationError("message missing 'type' field")
@@ -199,7 +197,7 @@ def validate_websocket_message(data: dict) -> Tuple[str, str]:
     if not isinstance(msg_type, str):
         raise ValidationError(f"type must be string, got {type(msg_type)}")
 
-    if msg_type not in ('chat', 'ping', 'command'):
+    if msg_type not in ("chat", "ping", "command"):
         raise ValidationError(f"invalid message type: {msg_type}")
 
     if content and not isinstance(content, str):
@@ -218,12 +216,12 @@ def check_sql_injection(text: str) -> bool:
         return False
 
     suspicious_patterns = [
-        r'--\s*$',       # SQL comment
-        r'/\*.*\*/',     # Block comment
-        r'\bOR\s+1\s*=\s*1\b',
-        r'\bDROP\s+TABLE\b',
-        r'\bUNION\s+SELECT\b',
-        r'\bEXEC\s*\(',
+        r"--\s*$",  # SQL comment
+        r"/\*.*\*/",  # Block comment
+        r"\bOR\s+1\s*=\s*1\b",
+        r"\bDROP\s+TABLE\b",
+        r"\bUNION\s+SELECT\b",
+        r"\bEXEC\s*\(",
     ]
 
     for pattern in suspicious_patterns:

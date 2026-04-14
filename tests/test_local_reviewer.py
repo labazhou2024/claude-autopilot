@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from claude_autopilot.core.local_reviewer import review_file, review_files, ReviewResult
+from claude_autopilot.core.local_reviewer import review_file, review_files
 
 
 def test_valid_python(tmp_path):

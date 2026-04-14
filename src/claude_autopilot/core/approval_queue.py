@@ -61,9 +61,7 @@ def _load() -> List[Dict]:
 def _save(items: List[Dict]) -> None:
     data_dir = _get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
-    _queue_file().write_text(
-        json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    _queue_file().write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def submit_approval(
@@ -105,9 +103,16 @@ def submit_approval(
     _save(items)
     try:
         from .event_bus import log_event
-        log_event("approval_submitted", agent="approval_queue", details={
-            "id": apr_id, "level": level, "title": title[:100],
-        })
+
+        log_event(
+            "approval_submitted",
+            agent="approval_queue",
+            details={
+                "id": apr_id,
+                "level": level,
+                "title": title[:100],
+            },
+        )
     except Exception:
         pass
     logger.info(f"[APPROVAL] {level} submitted: {title} (id={apr_id})")
@@ -149,9 +154,15 @@ def _resolve(apr_id: str, status: str, response: str) -> bool:
             _save(items)
             try:
                 from .event_bus import log_event
-                log_event("approval_resolved", agent="ceo", details={
-                    "id": apr_id, "status": status,
-                })
+
+                log_event(
+                    "approval_resolved",
+                    agent="ceo",
+                    details={
+                        "id": apr_id,
+                        "status": status,
+                    },
+                )
             except Exception:
                 pass
             return True

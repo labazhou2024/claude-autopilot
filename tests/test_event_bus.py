@@ -1,8 +1,5 @@
 """Tests for event_bus -- append-only JSONL event sourcing."""
 
-import json
-from pathlib import Path
-
 from claude_autopilot.core import event_bus
 
 

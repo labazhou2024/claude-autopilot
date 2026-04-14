@@ -25,7 +25,7 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -74,7 +74,7 @@ def _extract_json(text: str) -> Optional[Dict]:
         pass
 
     # Try extracting from markdown code block
-    md_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', text, re.DOTALL)
+    md_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
     if md_match:
         try:
             return json.loads(md_match.group(1).strip())
@@ -82,7 +82,7 @@ def _extract_json(text: str) -> Optional[Dict]:
             pass
 
     # Try finding first { ... } block
-    brace_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', text, re.DOTALL)
+    brace_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", text, re.DOTALL)
     if brace_match:
         try:
             return json.loads(brace_match.group(0))
@@ -92,28 +92,30 @@ def _extract_json(text: str) -> Optional[Dict]:
     return None
 
 
-DECAY_TAU = 0.95              # Per-consolidation decay
-USAGE_BOOST = 0.05            # Base boost when retrieved (halved from 0.1)
-PRUNE_THRESHOLD = 0.15        # Archive below this (raised from 0.1)
+DECAY_TAU = 0.95  # Per-consolidation decay
+USAGE_BOOST = 0.05  # Base boost when retrieved (halved from 0.1)
+PRUNE_THRESHOLD = 0.15  # Archive below this (raised from 0.1)
 CONSOLIDATION_THRESHOLD = 10  # Episodes before consolidation
-MAX_PATTERNS = 50             # Cap total patterns to prevent unbounded growth
-MIN_SOURCE_EPISODES = 2       # Minimum episodes for a pattern to survive pruning
-INITIAL_CONFIDENCE = 0.4      # New patterns start at "observed" level (ECC Instinct model: 0.3-0.9)
-MAX_CONFIDENCE = 0.95         # Cap to prevent overconfidence
+MAX_PATTERNS = 50  # Cap total patterns to prevent unbounded growth
+MIN_SOURCE_EPISODES = 2  # Minimum episodes for a pattern to survive pruning
+INITIAL_CONFIDENCE = 0.4  # New patterns start at "observed" level (ECC Instinct model: 0.3-0.9)
+MAX_CONFIDENCE = 0.95  # Cap to prevent overconfidence
 
 
 @dataclass
 class SemanticPattern:
     """A reusable rule extracted from episodes."""
+
     pattern_id: str
-    rule: str                     # The actual rule/insight
-    tags: List[str]               # For keyword retrieval
-    confidence: float = INITIAL_CONFIDENCE  # 0.0-1.0; new patterns start at 0.4 (ECC Instinct model)
-    source_episodes: int = 0      # How many episodes contributed
+    rule: str  # The actual rule/insight
+    tags: List[str]  # For keyword retrieval
+    # 0.0-1.0; new patterns start at 0.4 (ECC Instinct model)
+    confidence: float = INITIAL_CONFIDENCE
+    source_episodes: int = 0  # How many episodes contributed
     source_episode_ids: List[str] = field(default_factory=list)  # Provenance chain
-    times_retrieved: int = 0      # Usage counter
-    created_at: str = ""          # ISO timestamp
-    last_used_at: str = ""        # ISO timestamp
+    times_retrieved: int = 0  # Usage counter
+    created_at: str = ""  # ISO timestamp
+    last_used_at: str = ""  # ISO timestamp
     last_consolidated_at: str = ""
     application_outcomes: List[Dict] = field(default_factory=list)
 
@@ -146,12 +148,9 @@ class SemanticMemory:
             try:
                 data = json.loads(self._file.read_text(encoding="utf-8"))
                 self._patterns = {
-                    k: SemanticPattern.from_dict(v)
-                    for k, v in data.get("patterns", {}).items()
+                    k: SemanticPattern.from_dict(v) for k, v in data.get("patterns", {}).items()
                 }
-                self._episodes_since_consolidation = data.get(
-                    "episodes_since_consolidation", 0
-                )
+                self._episodes_since_consolidation = data.get("episodes_since_consolidation", 0)
                 logger.info("Loaded %d semantic patterns", len(self._patterns))
             except Exception as e:
                 logger.warning("Failed to load patterns: %s", e)
@@ -168,36 +167,53 @@ class SemanticMemory:
         }
         atomic_write_json(self._file, data)
 
-    def record_episode(self, task: str, output: str, score: int,
-                       agent: str = "", tags: List[str] = None):
+    def record_episode(
+        self, task: str, output: str, score: int, agent: str = "", tags: List[str] = None
+    ):
         """Record a completed episode. Triggers consolidation if threshold reached."""
         try:
             from claude_autopilot.core.event_bus import log_event
-            log_event("episode_recorded", agent=agent or "system", details={
-                "task": task[:100], "score": score,
-                "episodes_since_consolidation": self._episodes_since_consolidation,
-            })
+
+            log_event(
+                "episode_recorded",
+                agent=agent or "system",
+                details={
+                    "task": task[:100],
+                    "score": score,
+                    "episodes_since_consolidation": self._episodes_since_consolidation,
+                },
+            )
         except Exception:
             pass
 
         self._episodes_since_consolidation += 1
 
         if self._episodes_since_consolidation >= CONSOLIDATION_THRESHOLD:
-            logger.info("Consolidation threshold reached (%d episodes)",
-                        self._episodes_since_consolidation)
+            logger.info(
+                "Consolidation threshold reached (%d episodes)", self._episodes_since_consolidation
+            )
             try:
                 from claude_autopilot.core.event_bus import log_event
-                log_event("consolidation_needed", agent="semantic_memory", details={
-                    "episodes_pending": self._episodes_since_consolidation,
-                })
+
+                log_event(
+                    "consolidation_needed",
+                    agent="semantic_memory",
+                    details={
+                        "episodes_pending": self._episodes_since_consolidation,
+                    },
+                )
             except Exception:
                 pass
 
         self._save()
 
-    def add_pattern(self, rule: str, tags: List[str],
-                    source_episodes: int = 1,
-                    source_episode_ids: List[str] = None) -> str:
+    def add_pattern(
+        self,
+        rule: str,
+        tags: List[str],
+        source_episodes: int = 1,
+        source_episode_ids: List[str] = None,
+    ) -> str:
         """Add a new semantic pattern (typically called by consolidation).
 
         Deduplicates against existing patterns by checking rule similarity.
@@ -253,7 +269,9 @@ class SemanticMemory:
 
         try:
             import numpy as np
+
             from claude_autopilot.core.embedding_engine import get_embedding_engine
+
             engine = get_embedding_engine()
             raw = engine.embed(query)
             if raw:
@@ -276,8 +294,10 @@ class SemanticMemory:
             if use_embeddings and query_vec is not None:
                 try:
                     import numpy as np
+
                     if p.pattern_id not in self._pattern_embeddings:
                         from claude_autopilot.core.embedding_engine import get_embedding_engine
+
                         engine = get_embedding_engine()
                         vec = np.array(engine.embed(p.rule), dtype=np.float32)
                         n = np.linalg.norm(vec)
@@ -300,10 +320,8 @@ class SemanticMemory:
         # Ensures patterns are always injected when available (borrowed from
         # Superpowers' "1% Rule": if there's even a chance a pattern helps, inject it).
         if not results and self._patterns:
-            by_conf = sorted(self._patterns.values(),
-                             key=lambda p: -p.confidence)
-            results = [p for p in by_conf[:top_k]
-                       if p.confidence >= PRUNE_THRESHOLD]
+            by_conf = sorted(self._patterns.values(), key=lambda p: -p.confidence)
+            results = [p for p in by_conf[:top_k] if p.confidence >= PRUNE_THRESHOLD]
 
         # Diminishing usage boost: boost = base / (1 + times_retrieved / 10)
         now = datetime.utcnow().isoformat() + "Z"
@@ -347,26 +365,29 @@ class SemanticMemory:
             p.last_consolidated_at = datetime.utcnow().isoformat() + "Z"
 
             # Prune: low confidence OR single-source patterns that decayed
-            should_prune = (
-                p.confidence < PRUNE_THRESHOLD
-                or (p.source_episodes < MIN_SOURCE_EPISODES
-                    and p.confidence < 0.5
-                    and p.times_retrieved == 0)
+            should_prune = p.confidence < PRUNE_THRESHOLD or (
+                p.source_episodes < MIN_SOURCE_EPISODES
+                and p.confidence < 0.5
+                and p.times_retrieved == 0
             )
             if should_prune:
                 pruned.append(pid)
 
         for pid in pruned:
-            logger.info("Pruning pattern %s (confidence=%.3f, sources=%d, retrievals=%d)",
-                        pid, self._patterns[pid].confidence,
-                        self._patterns[pid].source_episodes,
-                        self._patterns[pid].times_retrieved)
+            logger.info(
+                "Pruning pattern %s (confidence=%.3f, sources=%d, retrievals=%d)",
+                pid,
+                self._patterns[pid].confidence,
+                self._patterns[pid].source_episodes,
+                self._patterns[pid].times_retrieved,
+            )
             del self._patterns[pid]
 
         self._episodes_since_consolidation = 0
         self._save()
-        logger.info("Decay applied: %d patterns remain, %d pruned",
-                    len(self._patterns), len(pruned))
+        logger.info(
+            "Decay applied: %d patterns remain, %d pruned", len(self._patterns), len(pruned)
+        )
 
     async def consolidate(self, episodes: List[Dict]) -> List[str]:
         """Extract patterns from recent episodes using LLM.
@@ -378,7 +399,7 @@ class SemanticMemory:
             return []
 
         try:
-            from claude_autopilot.orchestration.llm_router import get_router, TaskType
+            from claude_autopilot.orchestration.llm_router import TaskType, get_router
         except Exception as e:
             logger.warning("llm_router unavailable for consolidation: %s", e)
             self.apply_decay()
@@ -391,21 +412,25 @@ class SemanticMemory:
                 ep["episode_id"] = f"ep_{int(time.time())}_{i}"
 
         episode_text = "\n".join(
-            f"- [{e.get('episode_id', '?')}] [score={e.get('score', '?')}, agent={e.get('agent', '?')}] {e.get('task', '')[:120]}"
+            f"- [{e.get('episode_id', '?')}] [score={e.get('score', '?')}, "
+            f"agent={e.get('agent', '?')}] {e.get('task', '')[:120]}"
             for e in episodes[:30]
         )
 
-        prompt = f"""Analyze these {len(episodes)} agent execution episodes and extract reusable patterns.
-
-## Episodes
-{episode_text}
-
-## Quality Requirements (STRICT)
-1. Each pattern MUST be derived from at least 2 episodes (not a single outlier)
-2. Each pattern MUST be SPECIFIC and ACTIONABLE -- not generic advice
-3. REJECT patterns like "ensure accuracy", "be thorough", "follow best practices"
-4. Good pattern example: "When modifying async functions, always check if callers use await -- 3 incidents of sync/async mismatch"
-5. Bad pattern example: "When summarizing, ensure clarity" -- this is obvious and unhelpful
+        n_ep = len(episodes)
+        prompt = (
+            f"Analyze these {n_ep} agent execution episodes and extract reusable patterns.\n"
+            f"\n## Episodes\n{episode_text}\n"
+            "\n## Quality Requirements (STRICT)\n"
+            "1. Each pattern MUST be derived from at least 2 episodes (not a single outlier)\n"
+            "2. Each pattern MUST be SPECIFIC and ACTIONABLE -- not generic advice\n"
+            '3. REJECT generic patterns like "ensure accuracy", '
+            '"be thorough", "follow best practices"\n'
+            '4. Good pattern example: "When modifying async functions, always check if callers\n'
+            '   use await -- 3 incidents of sync/async mismatch"\n'
+            '5. Bad pattern example: "When summarizing, ensure clarity" -- obvious and unhelpful'
+        )
+        prompt += """
 
 ## Output Format
 Return JSON:
@@ -470,20 +495,23 @@ Return empty patterns array if nothing meets the quality bar. Quality > quantity
                 if specificity < 0.3:
                     logger.info(
                         "Rejected low-specificity pattern (score=%.2f): %s",
-                        specificity, rule[:60],
+                        specificity,
+                        rule[:60],
                     )
                     continue
 
                 pid = self.add_pattern(
-                    rule, tags,
+                    rule,
+                    tags,
                     source_episodes=count,
                     source_episode_ids=source_ids,
                 )
                 new_ids.append(pid)
 
             self.apply_decay()
-            logger.info("Consolidated: %d new patterns from %d episodes",
-                        len(new_ids), len(episodes))
+            logger.info(
+                "Consolidated: %d new patterns from %d episodes", len(new_ids), len(episodes)
+            )
             return new_ids
 
         except Exception as e:
@@ -506,8 +534,9 @@ Return empty patterns array if nothing meets the quality bar. Quality > quantity
             lines.append(f"- [{p.confidence:.0%}]{source_info} {p.rule}")
         return "\n".join(lines)
 
-    def record_application_outcome(self, pattern_id: str, success: bool,
-                                   project_id: str = "") -> None:
+    def record_application_outcome(
+        self, pattern_id: str, success: bool, project_id: str = ""
+    ) -> None:
         """Record outcome of pattern application (ECC Instinct confidence model).
 
         Success: confidence += 0.1 (capped at MAX_CONFIDENCE=0.95)
@@ -529,8 +558,12 @@ Return empty patterns array if nothing meets the quality bar. Quality > quantity
             p.confidence = max(PRUNE_THRESHOLD, p.confidence - 0.05)
 
         self._save()
-        logger.info("Pattern %s outcome recorded: success=%s, confidence=%.2f",
-                    pattern_id, success, p.confidence)
+        logger.info(
+            "Pattern %s outcome recorded: success=%s, confidence=%.2f",
+            pattern_id,
+            success,
+            p.confidence,
+        )
 
     async def _score_specificity(self, router, rule: str) -> float:
         """Ask LLM to score pattern specificity 0-1. Returns 0.0 on failure."""
@@ -542,6 +575,7 @@ Return empty patterns array if nothing meets the quality bar. Quality > quantity
         )
         try:
             from claude_autopilot.orchestration.llm_router import TaskType
+
             response = router.call(
                 task_type=TaskType.CHAT,
                 messages=[{"role": "user", "content": prompt}],
@@ -571,7 +605,9 @@ Return empty patterns array if nothing meets the quality bar. Quality > quantity
             self._patterns.values(),
             key=lambda p: (p.confidence, p.times_retrieved, p.source_episodes),
         )
-        logger.info("Evicting weakest pattern %s (conf=%.3f)", weakest.pattern_id, weakest.confidence)
+        logger.info(
+            "Evicting weakest pattern %s (conf=%.3f)", weakest.pattern_id, weakest.confidence
+        )
         del self._patterns[weakest.pattern_id]
 
     @property
@@ -584,14 +620,16 @@ Return empty patterns array if nothing meets the quality bar. Quality > quantity
             "pattern_count": self.pattern_count,
             "episodes_pending": self._episodes_since_consolidation,
             "avg_confidence": (
-                sum(p.confidence for p in self._patterns.values()) /
-                len(self._patterns) if self._patterns else 0
+                sum(p.confidence for p in self._patterns.values()) / len(self._patterns)
+                if self._patterns
+                else 0
             ),
             "max_patterns": MAX_PATTERNS,
         }
 
 
 # --- Module-level helpers ---
+
 
 def _text_similarity(a: str, b: str) -> float:
     """Simple word-overlap Jaccard similarity."""
@@ -605,11 +643,18 @@ def _text_similarity(a: str, b: str) -> float:
 
 
 _GENERIC_PHRASES = [
-    "ensure accuracy", "be thorough", "follow best practices",
-    "ensure clarity", "ensure quality", "be specific",
-    "ensure completeness", "maintain consistency",
-    "ensure relevance", "achieve high performance",
+    "ensure accuracy",
+    "be thorough",
+    "follow best practices",
+    "ensure clarity",
+    "ensure quality",
+    "be specific",
+    "ensure completeness",
+    "maintain consistency",
+    "ensure relevance",
+    "achieve high performance",
 ]
+
 
 def _is_generic_pattern(rule: str) -> bool:
     """Reject patterns that are obvious generic advice."""
