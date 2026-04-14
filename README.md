@@ -1,5 +1,9 @@
 # claude-autopilot
 
+[![CI](https://github.com/labazhou2024/claude-autopilot/actions/workflows/ci.yml/badge.svg)](https://github.com/labazhou2024/claude-autopilot/actions/workflows/ci.yml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 > **From Copilot to Autopilot** -- Autonomous multi-agent orchestration for Claude Code.
 
 Every AI coding tool today follows the same paradigm: *human gives instructions, AI executes*. claude-autopilot flips this: **AI runs autonomously, human reviews asynchronously as CEO**.
